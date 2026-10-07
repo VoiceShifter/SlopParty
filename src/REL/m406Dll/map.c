@@ -1142,9 +1142,9 @@ void fn_1_45BC(HU3DMODEL *arg0, Mtx arg1)
         GXCallDisplayList(var_r31->unk_A4, var_r31->unk_A0);
         for (var_r30 = 1; var_r30 < 29; var_r30++) {
             var_r29 = var_r30 * 35;
-            GXSETARRAY(GX_VA_POS, &var_r31->unk_84[var_r29], 35 * sizeof(Vec), sizeof(Vec), TRUE);
-            GXSETARRAY(GX_VA_NRM, &var_r31->unk_88[var_r29], 35 * sizeof(Vec), sizeof(Vec), TRUE);
-            GXSETARRAY(GX_VA_CLR0, &var_r31->unk_90[var_r29], 35 * sizeof(GXColor), sizeof(GXColor), TRUE);
+            GXSETARRAY(GX_VA_POS, &var_r31->unk_84[var_r29], 70 * sizeof(Vec), sizeof(Vec), TRUE);
+            GXSETARRAY(GX_VA_NRM, &var_r31->unk_88[var_r29], 70 * sizeof(Vec), sizeof(Vec), TRUE);
+            GXSETARRAY(GX_VA_CLR0, &var_r31->unk_90[var_r29], 70 * sizeof(GXColor), sizeof(GXColor), TRUE);
             GXCallDisplayList(var_r31->unk_A4, var_r31->unk_A0);
         }
     }
