@@ -882,10 +882,16 @@ static void MaterialLoad(void)
             new_mat->attrNum = curr_mat->attrNum;
             // the pointers are being treated as values
             new_mat->attr = (intptr_t *)(NSymIndex+((uintptr_t)curr_mat->attr));
-            rgba[i].r = new_mat->litColor[0];
-            rgba[i].g = new_mat->litColor[1];
-            rgba[i].b = new_mat->litColor[2];
-            rgba[i].a = 255;
+#ifdef TARGET_PC
+            if (i < (s32)(sizeof(rgba) / sizeof(rgba[0]))) {
+#endif
+                rgba[i].r = new_mat->litColor[0];
+                rgba[i].g = new_mat->litColor[1];
+                rgba[i].b = new_mat->litColor[2];
+                rgba[i].a = 255;
+#ifdef TARGET_PC
+            }
+#endif
             for(j=0; j<new_mat->attrNum; j++) {
                 new_mat->attr[j] = new_mat->attr[j];
             }
