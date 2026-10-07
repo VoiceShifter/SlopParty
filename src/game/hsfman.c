@@ -1867,6 +1867,13 @@ void lightSet(HU3DLIGHT* lightP, s16 lightBit, Mtx *cameraMtx, Mtx *cameraMtxXPo
     case 0:
         GXInitLightAttn(&lightObj, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
         GXInitLightSpot(&lightObj, lightP->cutoff, lightP->func);
+#ifdef TARGET_PC
+        if (lightP->func == GX_SP_SHARP && lightP->cutoff > 0.0f && lightP->cutoff <= 90.0f) {
+            f32 cr = cosd(lightP->cutoff);
+            f32 d = (1.0f - cr) * (1.0f - cr);
+            GXInitLightAttnA(&lightObj, (cr * (cr - 2.0f)) / d, 2.0f / d, -1.0f / d);
+        }
+#endif
         break;
     case 1:
         GXInitLightAttn(&lightObj, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);

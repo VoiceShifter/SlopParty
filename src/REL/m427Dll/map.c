@@ -1977,10 +1977,10 @@ void fn_1_9B88(HU3DMODEL *model, Mtx matrix)
         GXClearVtxDesc();
         GXSetVtxDesc(GX_VA_POS, GX_INDEX16);
         GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_TEX_ST, GX_RGBA6, 0);
-        GXSETARRAY(GX_VA_POS, &var_r31->unkC, sizeof(var_r31->unkC), sizeof(Vec), TRUE);
+        GXSETARRAY(GX_VA_POS, &var_r31->unkC, 4 * sizeof(Vec), sizeof(Vec), TRUE);
         GXSetVtxDesc(GX_VA_TEX0, GX_INDEX16);
         GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_RGBA6, 0);
-        GXSETARRAY(GX_VA_TEX0, &var_r31->unk3C, sizeof(var_r31->unk3C), sizeof(Vec2f), TRUE);
+        GXSETARRAY(GX_VA_TEX0, &var_r31->unk3C, 4 * sizeof(Vec2f), sizeof(Vec2f), TRUE);
         GXSetVtxDesc(GX_VA_TEX1, GX_INDEX16);
         GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX1, GX_TEX_ST, GX_RGBA6, 0);
         GXSETARRAY(GX_VA_TEX1, var_r31->unk5C, sizeof(var_r31->unk5C), sizeof(Vec2f), TRUE);
