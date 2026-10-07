@@ -1764,6 +1764,9 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
     s32 var_r20;
     s16 var_r30;
     GXCITexFmt fmt;
+    GXTexFmt expected_fmt = GX_TF_RGBA8;
+    GXBool tex_initialized;
+    s16 original_tex_id = texId;
 
     if (bmpPtr == 0) {
         OSReport("Error: No Texture\n");
@@ -1776,22 +1779,26 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
     var_r20 = (attrP->flag & 0x80) ? GX_TRUE : GX_FALSE;
     switch (bmpPtr->dataFmt) {
         case 6:
+            expected_fmt = GX_TF_RGBA8;
             if (!attrP->tex_initialized) {
                 GXInitTexObj(tex_obj, bmpPtr->data, var_r27, var_r26, GX_TF_RGBA8, var_r22, var_r21, var_r20);
             }
             break;
         case 4:
+            expected_fmt = GX_TF_RGB565;
             if (!attrP->tex_initialized) {
                 GXInitTexObj(tex_obj, bmpPtr->data, var_r27, var_r26, GX_TF_RGB565, var_r22, var_r21, var_r20);
             }
             break;
         case 5:
+            expected_fmt = GX_TF_RGB5A3;
             if (!attrP->tex_initialized) {
                 GXInitTexObj(tex_obj, bmpPtr->data, var_r27, var_r26, GX_TF_RGB5A3, var_r22, var_r21, var_r20);
             }
             break;
         case 9:
             fmt = bmpPtr->pixSize < 8 ? GX_TF_C4 : GX_TF_C8;
+            expected_fmt = (GXTexFmt)fmt;
             if (!attrP->tlut_initialized) {
                 GXInitTlutObj(tlut_obj, bmpPtr->palData, GX_TL_RGB565, bmpPtr->palSize);
                 attrP->tlut_initialized = TRUE;
@@ -1803,6 +1810,7 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             break;
         case 10:
             fmt = bmpPtr->pixSize < 8 ? GX_TF_C4 : GX_TF_C8;
+            expected_fmt = (GXTexFmt)fmt;
             if (!attrP->tlut_initialized) {
                 GXInitTlutObj(tlut_obj, bmpPtr->palData, GX_TL_RGB5A3, bmpPtr->palSize);
                 attrP->tlut_initialized = TRUE;
@@ -1813,6 +1821,7 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             }
             break;
         case 0:
+            expected_fmt = GX_TF_I4;
             var_r30 = (s16)texId;
             texCol[var_r30].r = bmpPtr->tint.r;
             texCol[var_r30].g = bmpPtr->tint.g;
@@ -1823,6 +1832,7 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             }
             break;
         case 1:
+            expected_fmt = GX_TF_I8;
             var_r30 = (s16)texId;
             texCol[var_r30].r = bmpPtr->tint.r;
             texCol[var_r30].g = bmpPtr->tint.g;
@@ -1833,6 +1843,7 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             }
             break;
         case 2:
+            expected_fmt = GX_TF_IA4;
             var_r30 = (s16)texId;
             texCol[var_r30].r = bmpPtr->tint.r;
             texCol[var_r30].g = bmpPtr->tint.g;
@@ -1843,6 +1854,7 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             }
             break;
         case 3:
+            expected_fmt = GX_TF_IA8;
             var_r30 = (s16)texId;
             texCol[var_r30].r = bmpPtr->tint.r;
             texCol[var_r30].g = bmpPtr->tint.g;
@@ -1853,12 +1865,14 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
             }
             break;
         case 7:
+            expected_fmt = GX_TF_CMPR;
             if (!attrP->tex_initialized) {
                 GXInitTexObj(tex_obj, bmpPtr->data, var_r27, var_r26, GX_TF_CMPR, var_r22, var_r21, var_r20);
             }
             break;
         case 11:
             fmt = bmpPtr->pixSize < 8 ? GX_TF_C4 : GX_TF_C8;
+            expected_fmt = (GXTexFmt)fmt;
             if (texId & 0x8000) {
                 tlut_obj = &attrP->tlut8000_obj;
                 tex_obj = &attrP->tex8000_obj;
@@ -1899,10 +1913,21 @@ static void LoadTexture(HU3DMODEL *modelP, HSFBITMAP *bmpPtr, HSFATTRIBUTE *attr
     else {
         GXInitTexObjLOD(tex_obj, GX_LIN_MIP_LIN, GX_LINEAR, 0.0f, bmpPtr->maxLod - 1, 0.0f, GX_TRUE, GX_TRUE, GX_ANISO_1);
     }
-    // Animated HSF materials can reuse the same cached GXTexObj while swapping to another bitmap frame.
-    // Refresh only the backing data pointer so dice faces animate without rebuilding the whole texture object.
-    if (((tex_obj == &attrP->tex_obj && attrP->tex_initialized) || (tex_obj == &attrP->tex8000_obj && attrP->tex8000_initialized))
-        && GXGetTexObjData(tex_obj) != bmpPtr->data) {
+    // Animated HSF materials can reuse the cached object while their texture layout stays the same.
+    tex_initialized = (tex_obj == &attrP->tex_obj) ? attrP->tex_initialized : attrP->tex8000_initialized;
+    if (tex_initialized && (GXGetTexObjFmt(tex_obj) != expected_fmt || GXGetTexObjWidth(tex_obj) != var_r27
+                               || GXGetTexObjHeight(tex_obj) != var_r26)) {
+        GXDestroyTexObj(tex_obj);
+        if (tex_obj == &attrP->tex_obj) {
+            attrP->tex_initialized = FALSE;
+        }
+        else {
+            attrP->tex8000_initialized = FALSE;
+        }
+        LoadTexture(modelP, bmpPtr, attrP, original_tex_id);
+        return;
+    }
+    if (tex_initialized && GXGetTexObjData(tex_obj) != bmpPtr->data) {
         GXInitTexObjData(tex_obj, bmpPtr->data);
     }
     // The 0x8000 texture path tracks its own initialized flag in the switch above.
