@@ -10,6 +10,7 @@
 #include "game/objsub.h"
 #include "game/pad.h"
 #include "game/process.h"
+#include "game/thpmain.h"
 #include "game/window.h"
 #include "game/wipe.h"
 
@@ -134,7 +135,6 @@ void fn_1_414(void)
             HuWinInit(1);
             #endif
 #endif
-#ifdef __MWERKS__
             grpId = HuSprGrpCreate(1);
             sprId = HuTHPSprCreateVol("movie/opmov_s00.thp", 0, 3000, 70.0);
             HuSprGrpMemberSet(grpId, 0, sprId);
@@ -148,7 +148,6 @@ void fn_1_414(void)
             }
             HuTHPClose();
             HuSprGrpKill(grpId);
-#endif
         }
     }
     espAttrReset(lbl_1_bss_152[9], HUSPR_ATTR_DISPOFF);

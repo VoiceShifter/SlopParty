@@ -8,6 +8,7 @@ extern "C" {
 
 #include "game/animdata.h"
 #include "game/hsfformat.h"
+#include "game/THPSimple.h"
 #include "ext_math.h"
 
 typedef struct AnimData32b {
@@ -360,6 +361,8 @@ void byteswap_hsfface(HsfFace32b *src, HSFFACE *dest);
 void byteswap_gamestat(GameStat *src);
 void byteswap_systemstate(SystemState *src);
 void byteswap_playerstate(PlayerState *src);
+
+void byteswap_thpheader(THPHeader *src);
 
 #ifdef __cplusplus
 }
