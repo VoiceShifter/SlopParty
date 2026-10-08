@@ -168,6 +168,7 @@ target_include_directories(dol PRIVATE include extern extern/aurora/include exte
 target_link_libraries(dol PUBLIC aurora::core aurora::card aurora::dvd aurora::gx aurora::mtx aurora::os aurora::si aurora::thp aurora::vi aurora::pad musyx absl::flat_hash_map nlohmann_json::nlohmann_json fmt::fmt rmlui_debugger)
 # TODO it doesn't work on Linux yet
 if (WIN32)
+    target_link_libraries(dol PRIVATE ws2_32)
     if(USE_ASAN)
         target_compile_definitions(dol PRIVATE USE_ASAN)
         set_source_files_properties(${GAME_FILES} PROPERTIES COMPILE_OPTIONS "-fsanitize=address")

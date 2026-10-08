@@ -23,6 +23,7 @@
 #include "port/imgui.h"
 #include "port/main.h"
 #include "port/dolassets.h"
+#include "port/netplay.h"
 #include "port/ui.h"
 #include "aurora/dvd.h"
 #include <aurora/aurora.h>
@@ -173,6 +174,11 @@ void main(void)
         HuPerfBegin(0);
         Hu3DPreProc();
         HuPadRead();
+#ifdef TARGET_PC
+        if (!partyboard_netplay_sync_frame(GlobalCounter)) {
+            PartyBoard_IsRunning = FALSE;
+        }
+#endif
         pfClsScr();
 
         HuPrcCall(1);

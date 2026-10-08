@@ -101,6 +101,7 @@ set(PORT_FILES
         src/port/io.cpp
         src/port/iso_validate.cpp
         src/port/msm.c
+        src/port/netplay.cpp
         src/port/OS.c
         src/port/portmain.cpp
         src/port/settings.cpp

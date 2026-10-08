@@ -29,6 +29,24 @@ Version Completion:
 - Extract the .zip file
 - Launch partyboard or partyboard.exe depending on your platform.
 
+## Experimental direct-IP multiplayer
+
+Direct-IP multiplayer currently supports one host and one client. Both players must run the same Party Board revision, use matching gameplay settings and compatible save data, and provide their own copy of the same game revision.
+
+Start the host first:
+
+```sh
+partyboard --netplay-host=46040
+```
+
+Then connect the second player, replacing the address with the host's IP address:
+
+```sh
+partyboard --netplay-connect=127.0.0.1:46040
+```
+
+The host controls player 1 and the client controls player 2. The default input delay is four frames; the host can change it with `--netplay-delay=N`. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
+
 # Building
 
 If you'd like to build Party Board from source, please read the [build instructions](building.md).

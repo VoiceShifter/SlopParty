@@ -22,6 +22,7 @@
 #include <port/config.hpp>
 #include <port/dolassets.h>
 #include <port/main.h>
+#include <port/netplay.h>
 #include <port/settings.h>
 #include <port/port_version.h>
 
@@ -534,7 +535,10 @@ extern "C" int port_main(int argc, char* argv[]) {
 
     InitializeDol();
 
-    game_main();
+    if (partyboard_netplay_initialize(argc, argv)) {
+        game_main();
+    }
+    partyboard_netplay_shutdown();
 
     partyboard_audio_shutdown();
 

@@ -21,6 +21,10 @@
 #include "game/wipe.h"
 #include "string.h"
 
+#ifdef TARGET_PC
+#include "port/netplay.h"
+#endif
+
 #include "game/armem.h"
 #include "game/audio.h"
 #include "game/board/audio.h"
@@ -1428,7 +1432,14 @@ float BoardArcCos(float value)
 
 void BoardRandInit(void)
 {
-    boardRandSeed = OSGetTime();
+#ifdef TARGET_PC
+    if (partyboard_netplay_active()) {
+        boardRandSeed = partyboard_netplay_random_seed();
+    } else
+#endif
+    {
+        boardRandSeed = OSGetTime();
+    }
 }
 
 u32 BoardRand(void)

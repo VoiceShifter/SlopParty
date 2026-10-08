@@ -1,5 +1,9 @@
 #include "dolphin.h"
 
+#ifdef TARGET_PC
+#include "port/netplay.h"
+#endif
+
 static u32 frand_seed;
 
 extern s32 rand8(void);
@@ -9,9 +13,16 @@ static inline u32 frandom(u32 param)
     s32 rand2, rand3;
 
     if (param == 0) {
-        param = rand8();
-        param = param ^ (s64)OSGetTime();
-        param ^= 0xD826BC89;
+#ifdef TARGET_PC
+        if (partyboard_netplay_active()) {
+            param = partyboard_netplay_random_seed();
+        } else
+#endif
+        {
+            param = rand8();
+            param = param ^ (s64)OSGetTime();
+            param ^= 0xD826BC89;
+        }
     }
 
     rand2 = param / (u32)0x1F31D;
