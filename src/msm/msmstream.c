@@ -77,7 +77,7 @@ static struct {
     /* 0x18 */ s8* streamPackFlag;
     /* 0x1C */ SND_ADPCMSTREAM_INFO* adpcmParam;
     /* 0x20 */ MSM_STREAM_SLOT* slot;
-    MSM_STREAM_HEADER header ATTRIBUTE_ALIGN(32);
+    ATTRIBUTE_ALIGN_DECL(32, MSM_STREAM_HEADER header);
 } StreamInfo; // Size 0x60
 
 typedef struct {
