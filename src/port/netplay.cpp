@@ -1,6 +1,8 @@
 #include "port/netplay.h"
 
+extern "C" {
 #include "game/pad.h"
+}
 #include "partyboard_version.h"
 #include "port/settings.h"
 
