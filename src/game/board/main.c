@@ -174,6 +174,9 @@ void BoardObjectSetup(BoardFunc create, BoardFunc destroy)
         case DLL_w21dll:
             GWSystem.board = BOARD_ID_EXTRA2;
             break;
+
+        default:
+            break;
     }
 }
 
