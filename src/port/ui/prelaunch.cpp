@@ -8,6 +8,7 @@
 #include "port/main.h"
 #include "port/settings.h"
 #include "modal.hpp"
+#include "netplay.hpp"
 #include "preset.hpp"
 #include "settings.hpp"
 #include "partyboard_version.h"
@@ -23,7 +24,6 @@
 #include <array>
 #include <atomic>
 #include <exception>
-#include <filesystem>
 #include <optional>
 #include <thread>
 
@@ -647,16 +647,25 @@ Prelaunch::Prelaunch()
         });
         apply_intro_animation(mMenuButtons.back()->root(), "delay-1");
 
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, "Network Play"));
+        mMenuButtons.back()->set_disabled(!activeDiscLoaded);
+        mMenuButtons.back()->on_pressed([this] {
+            if (!prelaunch_state().activeDiscPath.empty()) {
+                push(std::make_unique<NetplayWindow>());
+            }
+        });
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-2");
+
         mMenuButtons.push_back(std::make_unique<Button>(menuList, "Settings"));
         mMenuButtons.back()->on_pressed([this] {
             mRestartSuppressed = false;
             push(std::make_unique<SettingsWindow>(true));
         });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-2");
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-3");
 
         mMenuButtons.push_back(std::make_unique<Button>(menuList, "Quit"));
         mMenuButtons.back()->on_pressed([] { PartyBoard_IsRunning = false; });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-3");
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-4");
     }
 
     mDiscStatus = mDocument->GetElementById("disc-status");
@@ -748,9 +757,6 @@ void Prelaunch::update()
     const bool activeDiscLoaded = !state.activeDiscPath.empty();
     const bool discRestartPending = activeDiscLoaded && state.configuredDiscPath != state.activeDiscPath;
     mDocument->SetClass("disc-ready", PartyBoard_IsGameLaunched);
-    if (canLaunchConfiguredDisc) {
-        PartyBoard_IsGameLaunched = true;
-    }
 
     if (!mEntranceAnimationStarted && mDocument != nullptr) {
         mDocument->SetClass("animate-in", true);
@@ -759,6 +765,9 @@ void Prelaunch::update()
 
     if (!mMenuButtons.empty()) {
         mMenuButtons[0]->set_text(activeDiscLoaded ? "Play" : "Select Disc Image");
+    }
+    if (mMenuButtons.size() > 1) {
+        mMenuButtons[1]->set_disabled(!activeDiscLoaded);
     }
 
     const auto discStatusLabel = mDiscStatus->GetElementById("disc-status-label");

@@ -484,7 +484,8 @@ extern "C" int port_main(int argc, char* argv[]) {
         partyboard::config::Save();
     }
 
-    if (!partyboard::getSettings().backend.skipPreLaunchUI) {
+    if (!partyboard::getSettings().backend.skipPreLaunchUI &&
+        !partyboard_netplay_requested(argc, argv)) {
         partyboard::ui::push_document(std::make_unique<partyboard::ui::Prelaunch>(), true);
 
         // pre game launch ui main loop

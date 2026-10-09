@@ -7,6 +7,7 @@ extern "C" {
 #include "port/settings.h"
 
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cstdio>
@@ -19,6 +20,7 @@ extern "C" {
 #include <ws2tcpip.h>
 #else
 #include <cerrno>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -94,11 +96,13 @@ struct Packet {
 };
 
 Role g_role = Role::None;
-Socket g_socket = INVALID_NET_SOCKET;
+std::atomic<Socket> g_socket { INVALID_NET_SOCKET };
+std::atomic_bool g_cancelRequested = false;
 bool g_socketSystemInitialized = false;
 bool g_active = false;
 u32 g_inputDelay = DEFAULT_INPUT_DELAY;
 u32 g_randomState = 0;
+std::string g_lastError;
 std::array<BufferedInput, INPUT_BUFFER_SIZE> g_localInputs{};
 
 void write_u16(u8 *data, u16 value)
@@ -186,12 +190,37 @@ void close_socket(Socket &socket)
     socket = INVALID_NET_SOCKET;
 }
 
+void interrupt_socket(Socket socket)
+{
+    if (socket == INVALID_NET_SOCKET) {
+        return;
+    }
+#ifdef _WIN32
+    shutdown(socket, SD_BOTH);
+#else
+    shutdown(socket, SHUT_RDWR);
+#endif
+}
+
+void close_global_socket()
+{
+    Socket socket = g_socket.exchange(INVALID_NET_SOCKET);
+    interrupt_socket(socket);
+    close_socket(socket);
+}
+
+void set_connection_error(const char *message)
+{
+    g_lastError = message;
+}
+
 bool initialize_socket_system()
 {
 #ifdef _WIN32
     WSADATA data{};
     if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
         std::fprintf(stderr, "[netplay] WSAStartup failed\n");
+        set_connection_error("Could not initialize Windows networking.");
         return false;
     }
 #endif
@@ -215,6 +244,7 @@ bool configure_socket(Socket socket)
     if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY,
             reinterpret_cast<const char *>(&enabled), sizeof(enabled)) != 0) {
         std::fprintf(stderr, "[netplay] Failed to configure TCP_NODELAY (%d)\n", socket_error());
+        set_connection_error("Could not configure the network connection.");
         return false;
     }
 #ifdef SO_NOSIGPIPE
@@ -238,6 +268,7 @@ bool configure_socket(Socket socket)
 #endif
     if (!timeoutConfigured) {
         std::fprintf(stderr, "[netplay] Failed to configure socket timeout (%d)\n", socket_error());
+        set_connection_error("Could not configure the network connection.");
         return false;
     }
     return true;
@@ -246,18 +277,24 @@ bool configure_socket(Socket socket)
 bool send_all(const u8 *data, size_t size)
 {
     while (size != 0) {
+        const Socket socket = g_socket.load();
+        if (socket == INVALID_NET_SOCKET) {
+            set_connection_error("The network connection was closed.");
+            return false;
+        }
 #ifdef _WIN32
-        const int sent = send(g_socket, reinterpret_cast<const char *>(data), static_cast<int>(size), 0);
+        const int sent = send(socket, reinterpret_cast<const char *>(data), static_cast<int>(size), 0);
 #else
 #ifdef MSG_NOSIGNAL
         constexpr int sendFlags = MSG_NOSIGNAL;
 #else
         constexpr int sendFlags = 0;
 #endif
-        const ssize_t sent = send(g_socket, data, size, sendFlags);
+        const ssize_t sent = send(socket, data, size, sendFlags);
 #endif
         if (sent <= 0) {
             std::fprintf(stderr, "[netplay] Send failed (%d)\n", socket_error());
+            set_connection_error("The peer disconnected or did not respond.");
             return false;
         }
         data += sent;
@@ -269,17 +306,24 @@ bool send_all(const u8 *data, size_t size)
 bool receive_all(u8 *data, size_t size)
 {
     while (size != 0) {
+        const Socket socket = g_socket.load();
+        if (socket == INVALID_NET_SOCKET) {
+            set_connection_error("The network connection was closed.");
+            return false;
+        }
 #ifdef _WIN32
-        const int received = recv(g_socket, reinterpret_cast<char *>(data), static_cast<int>(size), 0);
+        const int received = recv(socket, reinterpret_cast<char *>(data), static_cast<int>(size), 0);
 #else
-        const ssize_t received = recv(g_socket, data, size, 0);
+        const ssize_t received = recv(socket, data, size, 0);
 #endif
         if (received == 0) {
             std::fprintf(stderr, "[netplay] Peer disconnected\n");
+            set_connection_error("The peer disconnected.");
             return false;
         }
         if (received < 0) {
             std::fprintf(stderr, "[netplay] Receive failed or timed out (%d)\n", socket_error());
+            set_connection_error("The peer disconnected or did not respond.");
             return false;
         }
         data += received;
@@ -420,11 +464,115 @@ u32 create_session_seed()
     return seed != 0 ? seed : 1;
 }
 
+bool socket_operation_pending(int error)
+{
+#ifdef _WIN32
+    return error == WSAEWOULDBLOCK || error == WSAEINPROGRESS;
+#else
+    return error == EINPROGRESS || error == EWOULDBLOCK;
+#endif
+}
+
+bool socket_operation_interrupted(int error)
+{
+#ifdef _WIN32
+    return error == WSAEINTR;
+#else
+    return error == EINTR;
+#endif
+}
+
+bool set_socket_blocking(Socket socket, bool blocking)
+{
+#ifdef _WIN32
+    u_long nonBlocking = blocking ? 0 : 1;
+    return ioctlsocket(socket, FIONBIO, &nonBlocking) == 0;
+#else
+    const int flags = fcntl(socket, F_GETFL, 0);
+    if (flags < 0) {
+        return false;
+    }
+    return fcntl(socket, F_SETFL, blocking ? flags & ~O_NONBLOCK : flags | O_NONBLOCK) == 0;
+#endif
+}
+
+bool wait_for_client(Socket listener)
+{
+    while (!g_cancelRequested.load()) {
+        fd_set readSet;
+        FD_ZERO(&readSet);
+        FD_SET(listener, &readSet);
+        timeval timeout { 0, 100000 };
+#ifdef _WIN32
+        const int ready = select(0, &readSet, nullptr, nullptr, &timeout);
+#else
+        const int ready = select(listener + 1, &readSet, nullptr, nullptr, &timeout);
+#endif
+        if (ready > 0) {
+            return true;
+        }
+        if (ready < 0 && !socket_operation_interrupted(socket_error())) {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool connect_to_address(Socket socket, const sockaddr *address, int addressSize)
+{
+    if (!set_socket_blocking(socket, false)) {
+        return false;
+    }
+
+    if (connect(socket, address, addressSize) != 0 && !socket_operation_pending(socket_error())) {
+        return false;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (!g_cancelRequested.load() && std::chrono::steady_clock::now() < deadline) {
+        fd_set writeSet;
+        fd_set errorSet;
+        FD_ZERO(&writeSet);
+        FD_ZERO(&errorSet);
+        FD_SET(socket, &writeSet);
+        FD_SET(socket, &errorSet);
+        timeval timeout { 0, 100000 };
+#ifdef _WIN32
+        const int ready = select(0, nullptr, &writeSet, &errorSet, &timeout);
+#else
+        const int ready = select(socket + 1, nullptr, &writeSet, &errorSet, &timeout);
+#endif
+        if (ready < 0) {
+            if (socket_operation_interrupted(socket_error())) {
+                continue;
+            }
+            return false;
+        }
+        if (ready == 0) {
+            continue;
+        }
+
+        int connectError = 0;
+#ifdef _WIN32
+        int connectErrorSize = sizeof(connectError);
+#else
+        socklen_t connectErrorSize = sizeof(connectError);
+#endif
+        if (getsockopt(socket, SOL_SOCKET, SO_ERROR,
+                reinterpret_cast<char *>(&connectError), &connectErrorSize) != 0 || connectError != 0) {
+            return false;
+        }
+        return set_socket_blocking(socket, true);
+    }
+    return false;
+}
+
 bool initialize_host(const NetplayConfig &config)
 {
     Socket listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listener == INVALID_NET_SOCKET) {
         std::fprintf(stderr, "[netplay] Failed to create host socket (%d)\n", socket_error());
+        set_connection_error("Could not create the host socket.");
         return false;
     }
 
@@ -439,6 +587,7 @@ bool initialize_host(const NetplayConfig &config)
     if (bind(listener, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) != 0 ||
         listen(listener, 1) != 0) {
         std::fprintf(stderr, "[netplay] Failed to listen on TCP port %u (%d)\n", config.port, socket_error());
+        set_connection_error("Could not open the selected TCP port. It may already be in use.");
         close_socket(listener);
         return false;
     }
@@ -452,27 +601,40 @@ bool initialize_host(const NetplayConfig &config)
 #else
     socklen_t peerAddressSize = sizeof(peerAddress);
 #endif
-    g_socket = accept(listener, reinterpret_cast<sockaddr *>(&peerAddress), &peerAddressSize);
+    Socket accepted = INVALID_NET_SOCKET;
+    if (wait_for_client(listener)) {
+        accepted = accept(listener, reinterpret_cast<sockaddr *>(&peerAddress), &peerAddressSize);
+    }
     close_socket(listener);
-    if (g_socket == INVALID_NET_SOCKET) {
-        std::fprintf(stderr, "[netplay] Failed to accept client (%d)\n", socket_error());
+    if (g_cancelRequested.load()) {
+        close_socket(accepted);
+        set_connection_error("Connection cancelled.");
         return false;
     }
-    if (!configure_socket(g_socket)) {
+    if (accepted == INVALID_NET_SOCKET) {
+        std::fprintf(stderr, "[netplay] Failed to accept client (%d)\n", socket_error());
+        set_connection_error("Could not accept the client connection.");
+        return false;
+    }
+    g_socket.store(accepted);
+    if (!configure_socket(accepted)) {
         return false;
     }
 
     Packet hello;
     if (!receive_packet(hello) || hello.type != MessageType::Hello || hello.size != 8) {
         std::fprintf(stderr, "[netplay] Invalid client handshake\n");
+        set_connection_error("The client sent an invalid handshake.");
         return false;
     }
     if (read_u32(&hello.payload[0]) != build_hash()) {
         std::fprintf(stderr, "[netplay] Client build does not match the host build\n");
+        set_connection_error("The client is using a different Party Board build.");
         return false;
     }
     if (read_u32(&hello.payload[4]) != gameplay_settings_hash()) {
         std::fprintf(stderr, "[netplay] Client gameplay settings do not match the host settings\n");
+        set_connection_error("The client's gameplay settings do not match the host's settings.");
         return false;
     }
 
@@ -502,33 +664,38 @@ bool initialize_client(const NetplayConfig &config)
     const int lookupResult = getaddrinfo(config.address.c_str(), port.c_str(), &hints, &addresses);
     if (lookupResult != 0) {
         std::fprintf(stderr, "[netplay] Could not resolve host '%s'\n", config.address.c_str());
+        set_connection_error("Could not resolve the host address.");
         return false;
     }
 
-    for (const addrinfo *address = addresses; address != nullptr; address = address->ai_next) {
+    Socket connected = INVALID_NET_SOCKET;
+    for (const addrinfo *address = addresses;
+         address != nullptr && !g_cancelRequested.load(); address = address->ai_next) {
         Socket candidate = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
         if (candidate == INVALID_NET_SOCKET) {
             continue;
         }
-#ifdef _WIN32
-        const int addressSize = static_cast<int>(address->ai_addrlen);
-#else
-        const socklen_t addressSize = static_cast<socklen_t>(address->ai_addrlen);
-#endif
-        if (connect(candidate, address->ai_addr, addressSize) == 0) {
-            g_socket = candidate;
+        if (connect_to_address(candidate, address->ai_addr, static_cast<int>(address->ai_addrlen))) {
+            connected = candidate;
             break;
         }
         close_socket(candidate);
     }
     freeaddrinfo(addresses);
 
-    if (g_socket == INVALID_NET_SOCKET) {
-        std::fprintf(stderr, "[netplay] Could not connect to %s:%u (%d)\n",
-            config.address.c_str(), config.port, socket_error());
+    if (g_cancelRequested.load()) {
+        close_socket(connected);
+        set_connection_error("Connection cancelled.");
         return false;
     }
-    if (!configure_socket(g_socket)) {
+    if (connected == INVALID_NET_SOCKET) {
+        std::fprintf(stderr, "[netplay] Could not connect to %s:%u (%d)\n",
+            config.address.c_str(), config.port, socket_error());
+        set_connection_error("Could not connect to the host. Check the address, port, and firewall.");
+        return false;
+    }
+    g_socket.store(connected);
+    if (!configure_socket(connected)) {
         return false;
     }
 
@@ -542,16 +709,19 @@ bool initialize_client(const NetplayConfig &config)
     Packet welcome;
     if (!receive_packet(welcome) || welcome.type != MessageType::Welcome || welcome.size != 12) {
         std::fprintf(stderr, "[netplay] Invalid host handshake\n");
+        set_connection_error("The host sent an invalid handshake.");
         return false;
     }
     if (read_u32(&welcome.payload[0]) != build_hash()) {
         std::fprintf(stderr, "[netplay] Host build does not match this build\n");
+        set_connection_error("The host is using a different Party Board build.");
         return false;
     }
     g_inputDelay = read_u32(&welcome.payload[4]);
     g_randomState = read_u32(&welcome.payload[8]);
     if (g_inputDelay > MAX_INPUT_DELAY || g_randomState == 0) {
         std::fprintf(stderr, "[netplay] Host sent invalid session settings\n");
+        set_connection_error("The host sent invalid session settings.");
         return false;
     }
 
@@ -748,10 +918,40 @@ bool synchronize_client(u32 frame, const InputState &localInput)
     return true;
 }
 
+bool initialize_connection(const NetplayConfig &config)
+{
+    g_lastError.clear();
+    g_cancelRequested.store(false);
+    if (g_active) {
+        set_connection_error("A network session is already active.");
+        return false;
+    }
+    if (!initialize_socket_system()) {
+        return false;
+    }
+
+    g_role = config.role;
+    const bool initialized = config.role == Role::Host ? initialize_host(config) : initialize_client(config);
+    if (!initialized || g_cancelRequested.load()) {
+        if (g_cancelRequested.load()) {
+            set_connection_error("Connection cancelled.");
+        }
+        partyboard_netplay_shutdown();
+        return false;
+    }
+
+    g_active = true;
+    return true;
+}
+
 } // namespace
 
 extern "C" BOOL partyboard_netplay_initialize(int argc, char **argv)
 {
+    if (g_active) {
+        return TRUE;
+    }
+
     NetplayConfig config;
     if (!parse_arguments(argc, argv, config)) {
         return FALSE;
@@ -759,32 +959,62 @@ extern "C" BOOL partyboard_netplay_initialize(int argc, char **argv)
     if (config.role == Role::None) {
         return TRUE;
     }
-    if (!initialize_socket_system()) {
+    return initialize_connection(config) ? TRUE : FALSE;
+}
+
+extern "C" BOOL partyboard_netplay_requested(int argc, char **argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view argument(argv[i]);
+        if (argument == "--netplay-host" || argument.starts_with("--netplay-host=") ||
+            argument.starts_with("--netplay-connect=")) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+extern "C" BOOL partyboard_netplay_host(u16 port, u32 inputDelay)
+{
+    if (port == 0 || inputDelay > MAX_INPUT_DELAY) {
+        set_connection_error("The port or input delay is invalid.");
         return FALSE;
     }
+    NetplayConfig config;
+    config.role = Role::Host;
+    config.port = port;
+    config.inputDelay = inputDelay;
+    return initialize_connection(config) ? TRUE : FALSE;
+}
 
-    g_role = config.role;
-    const bool initialized = config.role == Role::Host ? initialize_host(config) : initialize_client(config);
-    if (!initialized) {
-        partyboard_netplay_shutdown();
+extern "C" BOOL partyboard_netplay_join(const char *address, u16 port)
+{
+    if (address == nullptr || address[0] == '\0' || port == 0) {
+        set_connection_error("The host address or port is invalid.");
         return FALSE;
     }
+    NetplayConfig config;
+    config.role = Role::Client;
+    config.address = address;
+    config.port = port;
+    return initialize_connection(config) ? TRUE : FALSE;
+}
 
-    g_active = true;
-    return TRUE;
+extern "C" void partyboard_netplay_cancel_pending(void)
+{
+    g_cancelRequested.store(true);
+    interrupt_socket(g_socket.load());
+}
+
+extern "C" const char *partyboard_netplay_last_error(void)
+{
+    return g_lastError.c_str();
 }
 
 extern "C" void partyboard_netplay_shutdown(void)
 {
     g_active = false;
-    if (g_socket != INVALID_NET_SOCKET) {
-#ifdef _WIN32
-        shutdown(g_socket, SD_BOTH);
-#else
-        shutdown(g_socket, SHUT_RDWR);
-#endif
-    }
-    close_socket(g_socket);
+    close_global_socket();
     shutdown_socket_system();
     g_role = Role::None;
     g_localInputs = {};

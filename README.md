@@ -33,19 +33,16 @@ Version Completion:
 
 Direct-IP multiplayer currently supports one host and one client. Both players must run the same Party Board revision, use matching gameplay settings and compatible save data, and provide their own copy of the same game revision.
 
-Start the host first:
+Select **Network Play** on the startup screen. The first player selects **Host**, chooses a TCP port and input delay, and starts the host. The second player selects **Join** and enters the host's IP address and port. Use `127.0.0.1` when testing two instances on one computer. The game starts automatically after the connection succeeds.
+
+The command-line options remain available as an alternative:
 
 ```sh
-partyboard --netplay-host=46040
-```
-
-Then connect the second player, replacing the address with the host's IP address:
-
-```sh
+partyboard --netplay-host=46040 --netplay-delay=4
 partyboard --netplay-connect=127.0.0.1:46040
 ```
 
-The host controls player 1 and the client controls player 2. The default input delay is four frames; the host can change it with `--netplay-delay=N`. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
+The host controls player 1 and the client controls player 2. The default input delay is four frames. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
 
 # Building
 
