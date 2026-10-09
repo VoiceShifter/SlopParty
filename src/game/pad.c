@@ -1,6 +1,9 @@
 #include "dolphin.h"
 #include "game/msm.h"
 #include "game/pad.h"
+#ifdef TARGET_PC
+#include "port/netplay.h"
+#endif
 
 #ifndef __MWERKS__
 #include <stdlib.h>
@@ -306,6 +309,11 @@ void HuPadRumbleAllStop(void)
 
 s16 HuPadStatGet(s16 pad)
 {
+#ifdef TARGET_PC
+    if (partyboard_netplay_active()) {
+        return HuPadErr[pad];
+    }
+#endif
     return _PadErr[pad];
 }
 
