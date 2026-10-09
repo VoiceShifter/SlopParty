@@ -1,6 +1,7 @@
 #include "port/netplay.h"
 
 extern "C" {
+#include "game/gamework_data.h"
 #include "game/pad.h"
 }
 #include "partyboard_version.h"
@@ -1035,8 +1036,22 @@ extern "C" BOOL partyboard_netplay_sync_frame(u32 frame)
     const bool synchronized = g_role == Role::Host ?
         synchronize_host(frame, localInput) : synchronize_client(frame, localInput);
     if (!synchronized) {
+        const Role disconnectedRole = g_role;
         std::fprintf(stderr, "[netplay] Session ended at frame %u\n", frame);
-        g_active = false;
+        partyboard_netplay_shutdown();
+        if (disconnectedRole == Role::Host) {
+            InputState disconnected;
+            disconnected.error = PAD_ERR_NO_CONTROLLER;
+            apply_input(1, disconnected);
+            for (int i = 0; i < 4; ++i) {
+                if (GWPlayerCfg[i].pad_idx == 1) {
+                    GWPlayerCfg[i].iscom = TRUE;
+                    GWPlayer[i].com = TRUE;
+                }
+            }
+            std::fprintf(stderr, "[netplay] Client disconnected; continuing with player 2 as a computer\n");
+            return TRUE;
+        }
         return FALSE;
     }
     return TRUE;
