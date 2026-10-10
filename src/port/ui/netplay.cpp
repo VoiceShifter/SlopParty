@@ -11,10 +11,6 @@
 #include <thread>
 #include <utility>
 
-extern "C" {
-#include "game/card.h"
-}
-
 namespace partyboard::ui {
 namespace {
 
@@ -94,7 +90,6 @@ public:
         mHandled = true;
         if (mSucceeded.load()) {
             mLaunchCommitted = true;
-            HuCardInit();
             PartyBoard_IsGameLaunched = true;
             return;
         }
