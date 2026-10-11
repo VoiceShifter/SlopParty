@@ -752,6 +752,7 @@ EXPORTS
     Hu3DTexScrollPosSet
     Hu3DTexScrollRotMoveSet
     Hu3DTexScrollRotSet
+    Hu3DWidescreenPerspective
     HuAMemDump
     HuAR_ARAMtoMRAMFileRead
     HuAR_DVDtoARAM
