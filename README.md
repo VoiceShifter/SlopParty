@@ -44,6 +44,8 @@ partyboard --netplay-connect=127.0.0.1:46040
 
 The host controls player 1 and the client controls player 2. The default input delay is four frames. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
 
+Both peers send future input before waiting and simulate each frame with identical delayed inputs. This pipeline uses network protocol 2; rebuild both peers together. For high-latency connections, increase **Input Delay** on the host to cover one-way latency (roughly half the ping time), with room for jitter. For example, try eight frames for a 240 ms round-trip connection. Too little delay causes lockstep to wait and reduces FPS; more delay increases controller latency. Both computers must also be able to run the game at 60 FPS.
+
 ### Connection diagnostics
 
 The console reports each peer's local Git revision, build/settings hashes, and the gameplay settings included in the hash. A **build mismatch** means different Git commits, not different disc-image checksums; rebuild both peers from the same commit. A **gameplay settings mismatch** requires matching the values on the `Hashed settings` lines, including `backend.skipBootSequence`.

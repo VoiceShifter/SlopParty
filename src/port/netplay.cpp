@@ -35,7 +35,7 @@ constexpr u16 DEFAULT_PORT = 46040;
 constexpr u32 DEFAULT_INPUT_DELAY = 4;
 constexpr u32 MAX_INPUT_DELAY = 30;
 constexpr u32 PROTOCOL_MAGIC = 0x50424E50; // PBNP
-constexpr u16 PROTOCOL_VERSION = 1;
+constexpr u16 PROTOCOL_VERSION = 2;
 constexpr size_t HEADER_SIZE = 12;
 constexpr size_t INPUT_SIZE = 15;
 constexpr size_t MAX_PAYLOAD_SIZE = 64;
@@ -59,7 +59,6 @@ enum class MessageType : u16 {
     Hello = 1,
     Welcome = 2,
     Input = 3,
-    Frame = 4,
     Reject = 5,
 };
 
@@ -928,7 +927,7 @@ bool load_local_input(u32 frame, InputState &state)
     return true;
 }
 
-bool send_client_input(u32 frame, const InputState &state)
+bool send_input(u32 frame, const InputState &state)
 {
     std::array<u8, 4 + INPUT_SIZE> payload{};
     write_u32(&payload[0], frame);
@@ -936,7 +935,7 @@ bool send_client_input(u32 frame, const InputState &state)
     return send_packet(MessageType::Input, payload.data(), payload.size());
 }
 
-bool receive_client_input(u32 expectedFrame, InputState &state)
+bool receive_input(u32 expectedFrame, InputState &state)
 {
     Packet packet;
     if (!receive_packet(packet) || packet.type != MessageType::Input || packet.size != 4 + INPUT_SIZE) {
@@ -945,7 +944,7 @@ bool receive_client_input(u32 expectedFrame, InputState &state)
     }
     const u32 frame = read_u32(&packet.payload[0]);
     if (frame != expectedFrame) {
-        std::fprintf(stderr, "[netplay] Expected client input for frame %u, received frame %u\n",
+        std::fprintf(stderr, "[netplay] Expected peer input for frame %u, received frame %u\n",
             expectedFrame, frame);
         return false;
     }
@@ -953,63 +952,26 @@ bool receive_client_input(u32 expectedFrame, InputState &state)
     return true;
 }
 
-bool send_frame(u32 frame, const InputState &host, const InputState &client)
-{
-    std::array<u8, 4 + INPUT_SIZE * 2> payload{};
-    write_u32(&payload[0], frame);
-    encode_input(&payload[4], host);
-    encode_input(&payload[4 + INPUT_SIZE], client);
-    return send_packet(MessageType::Frame, payload.data(), payload.size());
-}
-
-bool receive_frame(u32 expectedFrame, InputState &host, InputState &client)
-{
-    Packet packet;
-    if (!receive_packet(packet) || packet.type != MessageType::Frame || packet.size != 4 + INPUT_SIZE * 2) {
-        std::fprintf(stderr, "[netplay] Received an invalid frame packet\n");
-        return false;
-    }
-    const u32 frame = read_u32(&packet.payload[0]);
-    if (frame != expectedFrame) {
-        std::fprintf(stderr, "[netplay] Expected synchronized frame %u, received frame %u\n",
-            expectedFrame, frame);
-        return false;
-    }
-    host = decode_input(&packet.payload[4]);
-    client = decode_input(&packet.payload[4 + INPUT_SIZE]);
-    return true;
-}
-
-bool synchronize_host(u32 frame, const InputState &localInput)
+bool synchronize_frame(u32 frame, const InputState &localInput)
 {
     store_local_input(frame + g_inputDelay, localInput);
+    // Send future input before waiting, so both directions share the delay window.
+    if (!send_input(frame + g_inputDelay, localInput)) {
+        return false;
+    }
 
-    InputState host;
-    InputState client;
+    InputState local;
+    InputState remote;
     if (frame >= g_inputDelay) {
-        if (!load_local_input(frame, host) || !receive_client_input(frame, client)) {
+        if (!load_local_input(frame, local) || !receive_input(frame, remote)) {
             return false;
         }
     }
-    if (!send_frame(frame, host, client)) {
-        return false;
+    if (g_role == Role::Host) {
+        apply_frame(frame, local, remote);
+    } else {
+        apply_frame(frame, remote, local);
     }
-    apply_frame(frame, host, client);
-    return true;
-}
-
-bool synchronize_client(u32 frame, const InputState &localInput)
-{
-    if (!send_client_input(frame + g_inputDelay, localInput)) {
-        return false;
-    }
-
-    InputState host;
-    InputState client;
-    if (!receive_frame(frame, host, client)) {
-        return false;
-    }
-    apply_frame(frame, host, client);
     return true;
 }
 
@@ -1137,8 +1099,7 @@ extern "C" BOOL partyboard_netplay_sync_frame(u32 frame)
     }
 
     const InputState localInput = capture_local_input();
-    const bool synchronized = g_role == Role::Host ?
-        synchronize_host(frame, localInput) : synchronize_client(frame, localInput);
+    const bool synchronized = synchronize_frame(frame, localInput);
     if (!synchronized) {
         const Role disconnectedRole = g_role;
         std::fprintf(stderr, "[netplay] Session ended at frame %u\n", frame);
