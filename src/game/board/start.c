@@ -438,7 +438,14 @@ static void PlayerDiceFall(omObjData *object, PlayerStartWork *data) {
     s32 i;
 
     if (data->time == 0) {
+#ifdef TARGET_PC
+        // All four dice appear together; this effect permits only one voice.
+        if (data->index == 0) {
+            HuAudFXPlay(0x302);
+        }
+#else
         HuAudFXPlay(0x302);
+#endif
         BoardPlayerPosGet(playerOrderOld[data->index], &boardPos);
         min = 250.0f;
         max = 700.0f;
