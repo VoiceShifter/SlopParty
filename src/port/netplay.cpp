@@ -519,14 +519,20 @@ bool wait_for_client(Socket listener)
     return false;
 }
 
-bool connect_to_address(Socket socket, const sockaddr *address, int addressSize)
+bool connect_to_address(Socket socket, const sockaddr *address, int addressSize, int &connectionError)
 {
+    connectionError = 0;
     if (!set_socket_blocking(socket, false)) {
+        connectionError = socket_error();
         return false;
     }
 
-    if (connect(socket, address, addressSize) != 0 && !socket_operation_pending(socket_error())) {
-        return false;
+    if (connect(socket, address, addressSize) != 0) {
+        const int error = socket_error();
+        if (!socket_operation_pending(error)) {
+            connectionError = error;
+            return false;
+        }
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -544,26 +550,44 @@ bool connect_to_address(Socket socket, const sockaddr *address, int addressSize)
         const int ready = select(socket + 1, nullptr, &writeSet, &errorSet, &timeout);
 #endif
         if (ready < 0) {
-            if (socket_operation_interrupted(socket_error())) {
+            const int error = socket_error();
+            if (socket_operation_interrupted(error)) {
                 continue;
             }
+            connectionError = error;
             return false;
         }
         if (ready == 0) {
             continue;
         }
 
-        int connectError = 0;
+        int socketConnectError = 0;
 #ifdef _WIN32
-        int connectErrorSize = sizeof(connectError);
+        int connectErrorSize = sizeof(socketConnectError);
 #else
-        socklen_t connectErrorSize = sizeof(connectError);
+        socklen_t connectErrorSize = sizeof(socketConnectError);
 #endif
         if (getsockopt(socket, SOL_SOCKET, SO_ERROR,
-                reinterpret_cast<char *>(&connectError), &connectErrorSize) != 0 || connectError != 0) {
+                reinterpret_cast<char *>(&socketConnectError), &connectErrorSize) != 0) {
+            connectionError = socket_error();
             return false;
         }
-        return set_socket_blocking(socket, true);
+        if (socketConnectError != 0) {
+            connectionError = socketConnectError;
+            return false;
+        }
+        if (!set_socket_blocking(socket, true)) {
+            connectionError = socket_error();
+            return false;
+        }
+        return true;
+    }
+    if (!g_cancelRequested.load()) {
+#ifdef _WIN32
+        connectionError = WSAETIMEDOUT;
+#else
+        connectionError = ETIMEDOUT;
+#endif
     }
     return false;
 }
@@ -670,16 +694,20 @@ bool initialize_client(const NetplayConfig &config)
     }
 
     Socket connected = INVALID_NET_SOCKET;
+    int connectionError = 0;
     for (const addrinfo *address = addresses;
          address != nullptr && !g_cancelRequested.load(); address = address->ai_next) {
         Socket candidate = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
         if (candidate == INVALID_NET_SOCKET) {
+            connectionError = socket_error();
             continue;
         }
-        if (connect_to_address(candidate, address->ai_addr, static_cast<int>(address->ai_addrlen))) {
+        int candidateError = 0;
+        if (connect_to_address(candidate, address->ai_addr, static_cast<int>(address->ai_addrlen), candidateError)) {
             connected = candidate;
             break;
         }
+        connectionError = candidateError;
         close_socket(candidate);
     }
     freeaddrinfo(addresses);
@@ -691,8 +719,12 @@ bool initialize_client(const NetplayConfig &config)
     }
     if (connected == INVALID_NET_SOCKET) {
         std::fprintf(stderr, "[netplay] Could not connect to %s:%u (%d)\n",
-            config.address.c_str(), config.port, socket_error());
-        set_connection_error("Could not connect to the host. Check the address, port, and firewall.");
+            config.address.c_str(), config.port, connectionError);
+        char errorMessage[160];
+        std::snprintf(errorMessage, sizeof(errorMessage),
+            "Could not connect to the host (socket error %d). Check the address, port, and firewall.",
+            connectionError);
+        set_connection_error(errorMessage);
         return false;
     }
     g_socket.store(connected);
