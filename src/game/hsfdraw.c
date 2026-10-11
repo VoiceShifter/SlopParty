@@ -403,7 +403,11 @@ BOOL ObjCullCheck(HSFDATA *hsf, HSFOBJECT *objPtr, Mtx mtx) {
     }
     fovTan = sind(cameraP->fov * 0.5) / cosd(cameraP->fov * 0.5);
     cameraH = fovTan * z;
+#ifdef TARGET_PC
+    cameraW = HU_DISP_ASPECT * Hu3DAspectScaleGet() * cameraH;
+#else
     cameraW = HU_DISP_ASPECT * cameraH;
+#endif
     cameraW = radius + ABS(cameraW);
     cameraH = radius + ABS(cameraH);
     if (ABS(x) < cameraW && ABS(y) < cameraH) {

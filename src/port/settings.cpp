@@ -133,6 +133,11 @@ CARDFileType partyboard_settings_card_file_type(void)
     return (CARDFileType)partyboard::getSettings().backend.cardFileType.getValue();
 }
 
+bool partyboard_settings_lockAspectRatio(void)
+{
+    return partyboard::getSettings().video.lockAspectRatio.getValue();
+}
+
 bool partyboard_settings_enableTurboKeybind(void)
 {
     return partyboard::getSettings().game.enableTurboKeybind;

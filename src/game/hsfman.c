@@ -15,6 +15,9 @@
 #include "ext_math.h"
 
 #ifdef TARGET_PC
+#include "dolphin/gx/GXAurora.h"
+#include "port/settings.h"
+
 #include <assert.h>
 #endif
 
@@ -55,6 +58,56 @@ static u16 NoSyncF;
 s32 modelKillAllF;
 
 #ifdef TARGET_PC
+static float Hu3DAspectScale = 1.0f;
+static u32 Hu3DRenderWidth = HU_FB_WIDTH;
+static u32 Hu3DRenderHeight = HU_FB_HEIGHT;
+
+static void Hu3DAspectScaleUpdate(void) {
+    u32 width;
+    u32 height;
+
+    AuroraGetRenderSize(&width, &height);
+    if (width != 0 && height != 0) {
+        Hu3DRenderWidth = width;
+        Hu3DRenderHeight = height;
+        if (!partyboard_settings_lockAspectRatio()) {
+            Hu3DAspectScale = ((float)width * HU_FB_HEIGHTF) / ((float)height * HU_FB_WIDTHF);
+            return;
+        }
+    }
+    Hu3DAspectScale = 1.0f;
+}
+
+float Hu3DAspectScaleGet(void) {
+    return Hu3DAspectScale;
+}
+
+void Hu3DWidescreenPerspective(Mtx44 mtx, float fov, float aspect, float nnear, float ffar) {
+    C_MTXPerspective(mtx, fov, aspect * Hu3DAspectScale, nnear, ffar);
+}
+
+void Hu3DUIViewportSet(void) {
+    u32 x = 0;
+    u32 y = 0;
+    u32 width = Hu3DRenderWidth;
+    u32 height = Hu3DRenderHeight;
+
+    if ((u64)width * HU_FB_HEIGHT > (u64)height * HU_FB_WIDTH) {
+        width = height * HU_FB_WIDTH / HU_FB_HEIGHT;
+        x = (Hu3DRenderWidth - width) / 2;
+    } else if ((u64)width * HU_FB_HEIGHT < (u64)height * HU_FB_WIDTH) {
+        height = width * HU_FB_HEIGHT / HU_FB_WIDTH;
+        y = (Hu3DRenderHeight - height) / 2;
+    }
+    GXSetViewportRender(x, y, width, height, 0.0f, 1.0f);
+    GXSetScissorRender(x, y, width, height);
+}
+
+static void Hu3DRenderViewportReset(void) {
+    GXSetViewportRender(0.0f, 0.0f, Hu3DRenderWidth, Hu3DRenderHeight, 0.0f, 1.0f);
+    GXSetScissorRender(0, 0, Hu3DRenderWidth, Hu3DRenderHeight);
+}
+
 #include "port/dolassets.h"
 #else
 #include "refMapData0.inc"
@@ -157,6 +210,9 @@ void Hu3DPreProc(void) {
     HU3DMODEL *data;
     s16 i;
 
+#ifdef TARGET_PC
+    Hu3DAspectScaleUpdate();
+#endif
     GXSetCopyClear(BGColor, 0xFFFFFF);
     data = &Hu3DData[0];
     for (i = 0; i < HU3D_MODEL_MAX; i++, data++) {
@@ -220,6 +276,9 @@ void Hu3DExec(void) {
             if (Hu3DCameraNo == 0) {
                 HuSprDispInit();
                 HuSprExec(0x7F);
+#ifdef TARGET_PC
+                Hu3DRenderViewportReset();
+#endif
             }
             if (FogData.fogType != GX_FOG_NONE) {
                 GXSetFog(FogData.fogType, FogData.fogStart, FogData.fogEnd, camera->nnear, camera->ffar, FogData.color);
@@ -323,6 +382,9 @@ void Hu3DExec(void) {
         }
     }
     HuSprFinish();
+#ifdef TARGET_PC
+    Hu3DRenderViewportReset();
+#endif
     Hu3DAnimExec();
     HuPerfEnd(3);
 }
@@ -1292,7 +1354,11 @@ void Hu3DCameraSet(s32 arg0, Mtx arg1) {
     HU3DCAMERA* temp_r31;
 
     temp_r31 = &Hu3DCamera[arg0];
+#ifdef TARGET_PC
+    Hu3DWidescreenPerspective(sp10, temp_r31->fov, temp_r31->aspect, temp_r31->nnear, temp_r31->ffar);
+#else
     C_MTXPerspective(sp10, temp_r31->fov, temp_r31->aspect, temp_r31->nnear, temp_r31->ffar);
+#endif
     GXSetProjection(sp10, GX_PERSPECTIVE);
     if (RenderMode->field_rendering != 0) {
         GXSetViewportJitter(temp_r31->viewportX, temp_r31->viewportY, temp_r31->viewportW, temp_r31->viewportH, temp_r31->viewportNear, temp_r31->viewportFar, VIGetNextField());

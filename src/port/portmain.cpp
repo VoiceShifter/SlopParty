@@ -402,7 +402,7 @@ extern "C" int port_main(int argc, char* argv[]) {
         config.windowPosX = -1;
         config.windowPosY = -1;
         config.windowWidth = HU_FB_WIDTH * 2;
-        config.windowHeight = HU_FB_HEIGHT * 2;
+        config.windowHeight = HU_FB_HEIGHT * 3 / 2;
         config.desiredBackend = ResolveDesiredBackend();
         config.logCallback = &aurora_log_callback;
         config.mem1Size = 64 * 1024 * 1024;

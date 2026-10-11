@@ -411,7 +411,7 @@ SettingsWindow::SettingsWindow(bool prelaunch)
             // mDoAud_seStartMenu(kSoundItemChange); // TODO PC
             getSettings().video.enableFullscreen.setValue(false);
             VISetWindowFullscreen(false);
-            VISetWindowSize(HU_FB_WIDTH * 2, HU_FB_HEIGHT * 2);
+            VISetWindowSize(HU_FB_WIDTH * 2, HU_FB_HEIGHT * 3 / 2);
             VICenterWindow();
         }),
             rightPane, [](Pane &pane) { pane.clear(); });
@@ -424,7 +424,7 @@ SettingsWindow::SettingsWindow(bool prelaunch)
         config_bool_select(leftPane, rightPane, getSettings().video.lockAspectRatio,
             {
                 .key = "Lock 4:3 Aspect Ratio",
-                .helpText = "Lock the game's aspect ratio to the original.",
+                .helpText = "Use the original 4:3 view instead of expanding the 3D view to fill the window.",
                 .onChange = [](bool value) { AuroraSetViewportPolicy(value ? AURORA_VIEWPORT_FIT : AURORA_VIEWPORT_STRETCH); },
             });
         config_bool_select(leftPane, rightPane, getSettings().game.pauseOnFocusLost,

@@ -546,6 +546,11 @@ void Hu3DCameraPosSetV(s32 cam, HuVecF *pos, HuVecF *up, HuVecF *target);
 void Hu3DCameraKill(s32);
 void Hu3DCameraAllKill(void);
 void Hu3DCameraSet(s32, Mtx);
+#ifdef TARGET_PC
+float Hu3DAspectScaleGet(void);
+void Hu3DWidescreenPerspective(Mtx44, float, float, float, float);
+void Hu3DUIViewportSet(void);
+#endif
 BOOL Hu3DModelCameraInfoSet(s16, u16);
 s16 Hu3DModelCameraCreate(s16, u16);
 void Hu3DCameraMotionOn(s16, s8);

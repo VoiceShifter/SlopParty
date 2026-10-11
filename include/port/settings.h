@@ -136,6 +136,7 @@ extern "C" {
 #endif
 
 CARDFileType partyboard_settings_card_file_type(void);
+bool partyboard_settings_lockAspectRatio(void);
 bool partyboard_settings_enableTurboKeybind(void);
 bool partyboard_settings_skipBootSequence(void);
 bool partyboard_settings_unlock_all_minigames(void);
