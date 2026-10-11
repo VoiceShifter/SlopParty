@@ -86,26 +86,23 @@ void Hu3DWidescreenPerspective(Mtx44 mtx, float fov, float aspect, float nnear, 
     C_MTXPerspective(mtx, fov, aspect * Hu3DAspectScale, nnear, ffar);
 }
 
-void Hu3DUIViewportSet(void) {
+void Hu3DMovieViewportSet(BOOL enable) {
     u32 x = 0;
     u32 y = 0;
     u32 width = Hu3DRenderWidth;
     u32 height = Hu3DRenderHeight;
 
-    if ((u64)width * HU_FB_HEIGHT > (u64)height * HU_FB_WIDTH) {
-        width = height * HU_FB_WIDTH / HU_FB_HEIGHT;
-        x = (Hu3DRenderWidth - width) / 2;
-    } else if ((u64)width * HU_FB_HEIGHT < (u64)height * HU_FB_WIDTH) {
-        height = width * HU_FB_HEIGHT / HU_FB_WIDTH;
-        y = (Hu3DRenderHeight - height) / 2;
+    if (enable || partyboard_settings_lockAspectRatio()) {
+        if ((u64)width * HU_FB_HEIGHT > (u64)height * HU_FB_WIDTH) {
+            width = height * HU_FB_WIDTH / HU_FB_HEIGHT;
+            x = (Hu3DRenderWidth - width) / 2;
+        } else if ((u64)width * HU_FB_HEIGHT < (u64)height * HU_FB_WIDTH) {
+            height = width * HU_FB_HEIGHT / HU_FB_WIDTH;
+            y = (Hu3DRenderHeight - height) / 2;
+        }
     }
     GXSetViewportRender(x, y, width, height, 0.0f, 1.0f);
     GXSetScissorRender(x, y, width, height);
-}
-
-static void Hu3DRenderViewportReset(void) {
-    GXSetViewportRender(0.0f, 0.0f, Hu3DRenderWidth, Hu3DRenderHeight, 0.0f, 1.0f);
-    GXSetScissorRender(0, 0, Hu3DRenderWidth, Hu3DRenderHeight);
 }
 
 #include "port/dolassets.h"
@@ -276,9 +273,6 @@ void Hu3DExec(void) {
             if (Hu3DCameraNo == 0) {
                 HuSprDispInit();
                 HuSprExec(0x7F);
-#ifdef TARGET_PC
-                Hu3DRenderViewportReset();
-#endif
             }
             if (FogData.fogType != GX_FOG_NONE) {
                 GXSetFog(FogData.fogType, FogData.fogStart, FogData.fogEnd, camera->nnear, camera->ffar, FogData.color);
@@ -382,9 +376,6 @@ void Hu3DExec(void) {
         }
     }
     HuSprFinish();
-#ifdef TARGET_PC
-    Hu3DRenderViewportReset();
-#endif
     Hu3DAnimExec();
     HuPerfEnd(3);
 }

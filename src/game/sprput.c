@@ -36,9 +36,6 @@ void HuSprDispInit(void)
         GXSetViewport(0, 0, HU_FB_WIDTH, HU_FB_HEIGHT, 0, 1);
     }
     GXSetScissor(0, 0, HU_FB_WIDTH, HU_FB_HEIGHT);
-#ifdef TARGET_PC
-    Hu3DUIViewportSet();
-#endif
     GXClearVtxDesc();
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);

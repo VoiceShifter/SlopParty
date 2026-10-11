@@ -549,7 +549,7 @@ void Hu3DCameraSet(s32, Mtx);
 #ifdef TARGET_PC
 float Hu3DAspectScaleGet(void);
 void Hu3DWidescreenPerspective(Mtx44, float, float, float, float);
-void Hu3DUIViewportSet(void);
+void Hu3DMovieViewportSet(BOOL);
 #endif
 BOOL Hu3DModelCameraInfoSet(s16, u16);
 s16 Hu3DModelCameraCreate(s16, u16);

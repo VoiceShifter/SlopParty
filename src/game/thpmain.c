@@ -332,12 +332,14 @@ static void THPViewSprFunc(HUSPRITE *arg0)
         temp_r29 = -((s32)audioTrack.unk04 / 2);
         GXSetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
 #ifdef TARGET_PC
+        Hu3DMovieViewportSet(TRUE);
         {
             s32 frame = THPSimpleDrawCurrentFrame(RenderMode, &sp8, sp48, temp_r30, temp_r29, audioTrack.unk00, audioTrack.unk04);
             if (frame >= 0) {
                 THPFrame = frame;
             }
         }
+        Hu3DMovieViewportSet(FALSE);
 #else
         THPFrame = THPSimpleDrawCurrentFrame(RenderMode, &sp8, sp48, temp_r30, temp_r29, audioTrack.unk00, audioTrack.unk04);
 #endif
