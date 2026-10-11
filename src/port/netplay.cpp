@@ -60,6 +60,12 @@ enum class MessageType : u16 {
     Welcome = 2,
     Input = 3,
     Frame = 4,
+    Reject = 5,
+};
+
+enum class RejectionReason : u32 {
+    BuildMismatch = 1,
+    SettingsMismatch = 2,
 };
 
 struct NetplayConfig {
@@ -318,13 +324,16 @@ bool receive_all(u8 *data, size_t size)
         const ssize_t received = recv(socket, data, size, 0);
 #endif
         if (received == 0) {
-            std::fprintf(stderr, "[netplay] Peer disconnected\n");
-            set_connection_error("The peer disconnected.");
+            std::fprintf(stderr, "[netplay] Peer disconnected; %zu bytes still expected\n", size);
+            set_connection_error("The peer closed the connection before the complete packet arrived.");
             return false;
         }
         if (received < 0) {
-            std::fprintf(stderr, "[netplay] Receive failed or timed out (%d)\n", socket_error());
-            set_connection_error("The peer disconnected or did not respond.");
+            const int error = socket_error();
+            char message[160];
+            std::snprintf(message, sizeof(message), "Receive failed or timed out (socket error %d; %zu bytes still expected).", error, size);
+            std::fprintf(stderr, "[netplay] %s\n", message);
+            set_connection_error(message);
             return false;
         }
         data += received;
@@ -356,22 +365,41 @@ bool receive_packet(Packet &packet)
     if (!receive_all(header.data(), header.size())) {
         return false;
     }
+    char message[160];
     if (read_u32(&header[0]) != PROTOCOL_MAGIC) {
-        std::fprintf(stderr, "[netplay] Received a packet with an invalid magic value\n");
+        std::snprintf(message, sizeof(message), "Invalid packet magic: expected 0x%08x, received 0x%08x. Is this a Party Board host?",
+            PROTOCOL_MAGIC, read_u32(&header[0]));
+        std::fprintf(stderr, "[netplay] %s\n", message);
+        set_connection_error(message);
         return false;
     }
     if (read_u16(&header[4]) != PROTOCOL_VERSION) {
-        std::fprintf(stderr, "[netplay] Peer uses a different protocol version\n");
+        std::snprintf(message, sizeof(message), "Protocol version mismatch: local=%u, peer=%u. Both players must use the same netplay protocol.",
+            PROTOCOL_VERSION, read_u16(&header[4]));
+        std::fprintf(stderr, "[netplay] %s\n", message);
+        set_connection_error(message);
         return false;
     }
 
     packet.type = static_cast<MessageType>(read_u16(&header[6]));
     packet.size = read_u32(&header[8]);
     if (packet.size > packet.payload.size()) {
-        std::fprintf(stderr, "[netplay] Received an oversized packet\n");
+        std::snprintf(message, sizeof(message), "Oversized packet: type=%u, payload=%zu bytes, maximum=%zu.",
+            static_cast<u16>(packet.type), packet.size, packet.payload.size());
+        std::fprintf(stderr, "[netplay] %s\n", message);
+        set_connection_error(message);
         return false;
     }
     return packet.size == 0 || receive_all(packet.payload.data(), packet.size);
+}
+
+void reject_handshake(RejectionReason reason)
+{
+    std::array<u8, 12> rejection{};
+    write_u32(&rejection[0], static_cast<u32>(reason));
+    write_u32(&rejection[4], build_hash());
+    write_u32(&rejection[8], gameplay_settings_hash());
+    send_packet(MessageType::Reject, rejection.data(), rejection.size());
 }
 
 bool parse_u16(std::string_view text, u16 &value)
@@ -647,19 +675,31 @@ bool initialize_host(const NetplayConfig &config)
     }
 
     Packet hello;
-    if (!receive_packet(hello) || hello.type != MessageType::Hello || hello.size != 8) {
-        std::fprintf(stderr, "[netplay] Invalid client handshake\n");
-        set_connection_error("The client sent an invalid handshake.");
+    if (!receive_packet(hello)) {
+        std::fprintf(stderr, "[netplay] Could not receive client handshake: %s\n", g_lastError.c_str());
         return false;
     }
-    if (read_u32(&hello.payload[0]) != build_hash()) {
-        std::fprintf(stderr, "[netplay] Client build does not match the host build\n");
-        set_connection_error("The client is using a different Party Board build.");
+    if (hello.type != MessageType::Hello || hello.size != 8) {
+        std::fprintf(stderr, "[netplay] Invalid client handshake: expected Hello (type=1, payload=8 bytes), received type=%u, payload=%zu bytes\n",
+            static_cast<u16>(hello.type), hello.size);
+        set_connection_error("The client sent an invalid handshake packet type or size.");
         return false;
     }
-    if (read_u32(&hello.payload[4]) != gameplay_settings_hash()) {
-        std::fprintf(stderr, "[netplay] Client gameplay settings do not match the host settings\n");
-        set_connection_error("The client's gameplay settings do not match the host's settings.");
+    const u32 clientBuild = read_u32(&hello.payload[0]);
+    const u32 clientSettings = read_u32(&hello.payload[4]);
+    std::fprintf(stderr, "[netplay] Client handshake: build_hash=0x%08x, settings_hash=0x%08x\n", clientBuild, clientSettings);
+    if (clientBuild != build_hash()) {
+        std::fprintf(stderr, "[netplay] Build mismatch: host=0x%08x, client=0x%08x. Both players must rebuild from the same Git commit.\n",
+            build_hash(), clientBuild);
+        reject_handshake(RejectionReason::BuildMismatch);
+        set_connection_error("Build mismatch. Both players must rebuild from the same Git commit.");
+        return false;
+    }
+    if (clientSettings != gameplay_settings_hash()) {
+        std::fprintf(stderr, "[netplay] Gameplay settings mismatch: host=0x%08x, client=0x%08x. Compare the 'Hashed settings' lines on both peers.\n",
+            gameplay_settings_hash(), clientSettings);
+        reject_handshake(RejectionReason::SettingsMismatch);
+        set_connection_error("Gameplay settings mismatch. Compare the 'Hashed settings' lines on both peers.");
         return false;
     }
 
@@ -740,20 +780,42 @@ bool initialize_client(const NetplayConfig &config)
     }
 
     Packet welcome;
-    if (!receive_packet(welcome) || welcome.type != MessageType::Welcome || welcome.size != 12) {
-        std::fprintf(stderr, "[netplay] Invalid host handshake\n");
-        set_connection_error("The host sent an invalid handshake.");
+    if (!receive_packet(welcome)) {
+        std::fprintf(stderr, "[netplay] Could not receive host handshake: %s No welcome/rejection received; check the host console for a build/settings rejection or cancellation.\n",
+            g_lastError.c_str());
+        return false;
+    }
+    if (welcome.type == MessageType::Reject && welcome.size == 12) {
+        const u32 reason = read_u32(&welcome.payload[0]);
+        const char *message = reason == static_cast<u32>(RejectionReason::BuildMismatch)
+            ? "Build mismatch. Both players must rebuild from the same Git commit."
+            : reason == static_cast<u32>(RejectionReason::SettingsMismatch)
+                ? "Gameplay settings mismatch. Compare the 'Hashed settings' lines on both peers."
+                : "The host rejected the connection with an unknown reason.";
+        std::fprintf(stderr, "[netplay] Host rejected handshake (reason=%u): %s\n", reason, message);
+        std::fprintf(stderr, "[netplay] Build hashes: host=0x%08x, client=0x%08x; gameplay settings hashes: host=0x%08x, client=0x%08x\n",
+            read_u32(&welcome.payload[4]), build_hash(), read_u32(&welcome.payload[8]), gameplay_settings_hash());
+        set_connection_error(message);
+        return false;
+    }
+    if (welcome.type != MessageType::Welcome || welcome.size != 12) {
+        std::fprintf(stderr, "[netplay] Invalid host handshake: expected Welcome (type=2, payload=12 bytes) or Reject (type=5, payload=12 bytes), received type=%u, payload=%zu bytes\n",
+            static_cast<u16>(welcome.type), welcome.size);
+        set_connection_error("The host sent an invalid handshake packet type or size.");
         return false;
     }
     if (read_u32(&welcome.payload[0]) != build_hash()) {
-        std::fprintf(stderr, "[netplay] Host build does not match this build\n");
-        set_connection_error("The host is using a different Party Board build.");
+        std::fprintf(stderr, "[netplay] Build mismatch: host=0x%08x, client=0x%08x. Both players must rebuild from the same Git commit.\n",
+            read_u32(&welcome.payload[0]), build_hash());
+        set_connection_error("Build mismatch. Both players must rebuild from the same Git commit.");
         return false;
     }
     g_inputDelay = read_u32(&welcome.payload[4]);
     g_randomState = read_u32(&welcome.payload[8]);
     if (g_inputDelay > MAX_INPUT_DELAY || g_randomState == 0) {
-        std::fprintf(stderr, "[netplay] Host sent invalid session settings\n");
+        std::fprintf(stderr, "[netplay] Host sent invalid session settings: input_delay=%u (maximum=%u), random_seed=0x%08x (must be nonzero)\n",
+            g_inputDelay, MAX_INPUT_DELAY, g_randomState);
+
         set_connection_error("The host sent invalid session settings.");
         return false;
     }
@@ -964,6 +1026,16 @@ bool initialize_connection(const NetplayConfig &config)
     }
 
     g_role = config.role;
+    std::fprintf(stderr, "[netplay] Local %s handshake: revision=%s, build_hash=0x%08x, settings_hash=0x%08x, protocol=%u\n",
+        config.role == Role::Host ? "host" : "client", PARTY_BOARD_WC_REVISION, build_hash(), gameplay_settings_hash(), PROTOCOL_VERSION);
+    const partyboard::UserSettings &settings = partyboard::getSettings();
+    std::fprintf(stderr, "[netplay] Hashed settings: game.language=%u, game.enableQuickTransform=%u, game.pauseOnFocusLost=%u, game.infiniteHearts=%u, "
+        "game.unlockAllMinigames=%u, game.unlockBowsersGnarlyParty=%u, game.enableTurboKeybind=%u, game.speedrunMode=%u, game.recordingMode=%u, backend.skipBootSequence=%u\n",
+        static_cast<u32>(settings.game.language.getValue()), static_cast<u32>(settings.game.enableQuickTransform.getValue()),
+        static_cast<u32>(settings.game.pauseOnFocusLost.getValue()), static_cast<u32>(settings.game.infiniteHearts.getValue()),
+        static_cast<u32>(settings.game.unlockAllMinigames.getValue()), static_cast<u32>(settings.game.unlockBowsersGnarlyParty.getValue()),
+        static_cast<u32>(settings.game.enableTurboKeybind.getValue()), static_cast<u32>(settings.game.speedrunMode.getValue()),
+        static_cast<u32>(settings.game.recordingMode.getValue()), static_cast<u32>(settings.backend.skipBootSequence.getValue()));
     const bool initialized = config.role == Role::Host ? initialize_host(config) : initialize_client(config);
     if (!initialized || g_cancelRequested.load()) {
         if (g_cancelRequested.load()) {

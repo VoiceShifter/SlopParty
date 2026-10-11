@@ -44,6 +44,12 @@ partyboard --netplay-connect=127.0.0.1:46040
 
 The host controls player 1 and the client controls player 2. The default input delay is four frames. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
 
+### Connection diagnostics
+
+The console reports each peer's local Git revision, build/settings hashes, and the gameplay settings included in the hash. A **build mismatch** means different Git commits, not different disc-image checksums; rebuild both peers from the same commit. A **gameplay settings mismatch** requires matching the values on the `Hashed settings` lines, including `backend.skipBootSequence`.
+
+The host sends build/settings rejection reasons to the client. If the host closes before sending a welcome or rejection, check the host console: that alone does not prove a hash mismatch. To save console output while using the startup GUI, run `./partyboard > netplay.log 2>&1` on Linux, or `.\partyboard.exe *> netplay.log` in Windows PowerShell.
+
 # Building
 
 If you'd like to build Party Board from source, please read the [build instructions](building.md).
