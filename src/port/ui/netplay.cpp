@@ -114,6 +114,14 @@ public:
     }
 
 private:
+    bool handle_nav_command(Rml::Event &event, NavCommand cmd) override
+    {
+        if (cmd == NavCommand::Menu) {
+            return true;
+        }
+        return Modal::handle_nav_command(event, cmd);
+    }
+
     void cancel_connection()
     {
         if (mCancelled) {
@@ -154,6 +162,7 @@ private:
 
 NetplayWindow::NetplayWindow()
 {
+    mSuppressNavFallback = true;
     add_tab("Host", [this](Rml::Element *content) {
         auto &leftPane = add_child<Pane>(content, Pane::Type::Controlled);
         auto &rightPane = add_child<Pane>(content, Pane::Type::Uncontrolled);
