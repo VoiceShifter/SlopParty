@@ -929,9 +929,14 @@ void fn_1_37A4(HU3DMODEL *arg0, Mtx arg1)
     Mtx sp5C;
     Mtx sp2C;
     float var_f31;
+    float aspect = 1.2f;
     GXTexObj spC;
     UnkBss10Struct *temp_r31;
 
+#ifdef TARGET_PC
+    // Project the copied scene with the same aspect as the widescreen camera.
+    aspect *= Hu3DAspectScaleGet();
+#endif
     GXLoadPosMtxImm(arg1, GX_PNMTX0);
     MTXInvXpose(arg1, spEC);
     GXLoadNrmMtxImm(spEC, GX_PNMTX0);
@@ -945,13 +950,13 @@ void fn_1_37A4(HU3DMODEL *arg0, Mtx arg1)
     GXInitTexObj(&spC, temp_r31->bmpData, temp_r31->sizeX, temp_r31->sizeY, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
     GXLoadTexObj(&spC, GX_TEXMAP3);
     GXSetNumTexGens(4);
-    C_MTXLightPerspective(sp2C, 30.0f, 1.2f, 0.5f, -0.5f, 0.5f, 0.5f);
+    C_MTXLightPerspective(sp2C, 30.0f, aspect, 0.5f, -0.5f, 0.5f, 0.5f);
     MTXInverse(Hu3DCameraMtx, spEC);
     MTXConcat(spEC, arg1, spEC);
     MTXConcat(sp2C, Hu3DCameraMtx, spBC);
     MTXConcat(spBC, spEC, spBC);
     GXLoadTexMtxImm(spBC, GX_TEXMTX0, GX_MTX3x4);
-    C_MTXLightPerspective(sp2C, 30.0f, 1.2f, 0.5f, -0.5f, 0.5f, 0.5f);
+    C_MTXLightPerspective(sp2C, 30.0f, aspect, 0.5f, -0.5f, 0.5f, 0.5f);
     MTXInverse(Hu3DCameraMtx, spEC);
     MTXConcat(spEC, arg1, spEC);
     MTXConcat(sp2C, Hu3DCameraMtx, spBC);
@@ -1033,12 +1038,16 @@ void fn_1_4024(HU3DMODEL *arg0, Mtx arg1)
     Mtx sp98;
     Mtx sp68;
     Mtx sp38;
+    float aspect = 1.2f;
     GXTexObj sp18;
     UnkBss10Struct *temp_r31;
 
+#ifdef TARGET_PC
+    aspect *= Hu3DAspectScaleGet();
+#endif
     fn_1_2714(1, GX_FALSE);
     GXLoadPosMtxImm(arg1, GX_PNMTX0);
-    C_MTXLightPerspective(sp98, 30.0f, 1.2f, 0.5f, -0.5f, 0.5f, 0.5f);
+    C_MTXLightPerspective(sp98, 30.0f, aspect, 0.5f, -0.5f, 0.5f, 0.5f);
     MTXInverse(Hu3DCameraMtx, sp68);
     MTXConcat(sp68, arg1, sp68);
     MTXConcat(sp98, Hu3DCameraMtx, sp38);

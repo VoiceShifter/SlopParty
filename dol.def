@@ -573,6 +573,7 @@ EXPORTS
     Hu3DAnimSet
     Hu3DAnimSpeedSet
     Hu3DAnmNoSet
+    Hu3DAspectScaleGet
     Hu3DBGColorSet
     Hu3DCameraAllKill
     Hu3DCameraCreate
