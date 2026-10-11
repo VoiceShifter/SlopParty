@@ -3,6 +3,7 @@
 #include "modal.hpp"
 #include "number_button.hpp"
 #include "pane.hpp"
+#include "prelaunch.hpp"
 #include "string_button.hpp"
 #include "port/main.h"
 #include "port/netplay.h"
@@ -90,6 +91,15 @@ public:
         mHandled = true;
         if (mSucceeded.load()) {
             mLaunchCommitted = true;
+            bool closingPrelaunch = false;
+            for (auto &document : get_document_stack()) {
+                if (dynamic_cast<Prelaunch *>(document.get()) != nullptr) {
+                    closingPrelaunch = true;
+                }
+                if (closingPrelaunch) {
+                    document->Document::hide(true);
+                }
+            }
             PartyBoard_IsGameLaunched = true;
             return;
         }
