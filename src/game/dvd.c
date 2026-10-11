@@ -4,6 +4,10 @@
 #include "dolphin/dvd.h"
 #include "dolphin/os.h"
 
+#ifdef TARGET_PC
+#include "port/netplay.h"
+#endif
+
 
 static DVDDiskID correctDiskID = {
     { 'M', 'P', 'G', 'C' }, //gameName
@@ -49,7 +53,16 @@ static void *HuDvdDataReadWait(DVDFileInfo *file, int heap, int mode, int num, D
     DCInvalidateRange(buf, OSRoundUp32B(len));
     OSReport("Rest Memory %x\n", HuMemHeapSizeGet(3)-HuMemUsedMallocSizeGet(3));
     CallBackStatus = 0;
-    DVDReadAsync(file, buf, OSRoundUp32B(len), 0, cb);
+#ifdef TARGET_PC
+    if (async && partyboard_netplay_active()) {
+        // Local I/O timing must not add different simulation frames on each peer.
+        s32 result = DVDReadPrio(file, buf, OSRoundUp32B(len), 0, 2);
+        cb(result, file);
+    } else
+#endif
+    {
+        DVDReadAsync(file, buf, OSRoundUp32B(len), 0, cb);
+    }
     if(!async) {
         while(!CallBackStatus) {
             HuDvdErrorWatch();
