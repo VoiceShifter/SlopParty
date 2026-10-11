@@ -1844,6 +1844,10 @@ static void CreateItemWindow(s32 arg0, s32 arg1)
             sp10.x = temp_r31->unk2C[i].x + 48.0f;
             sp10.y = temp_r31->unk2C[i].y;
             sp10.z = 400.0f;
+#ifdef TARGET_PC
+            // Keep the item preview aligned with the stretched description windows.
+            sp10.x += (sp10.x - HU_DISP_CENTERX) * (Hu3DAspectScaleGet() - 1.0f);
+#endif
             Hu3D2Dto3D(&sp10, 1, &sp10);
             temp_r31->unk06[i] = BoardModelCreate(BoardItemModelGet(temp_r28), NULL, 0);
             BoardModelLayerSet(temp_r31->unk06[i], 6);
@@ -1951,6 +1955,9 @@ static void UpdateItemWindow(omObjData *arg0)
                 if (temp_r31->unk00[i] == 5) {
                     sp14.y += 35.0f;
                 }
+#ifdef TARGET_PC
+                sp14.x += (sp14.x - HU_DISP_CENTERX) * (Hu3DAspectScaleGet() - 1.0f);
+#endif
                 Hu3D2Dto3D(&sp14, 1, &sp14);
                 BoardModelPosSetV(temp_r31->unk06[i], &sp14);
                 BoardCameraRotGet(&sp8);
