@@ -6,6 +6,13 @@
 
 static u32 frand_seed;
 
+#ifdef TARGET_PC
+u32 frandStateGet(void)
+{
+    return frand_seed;
+}
+#endif
+
 extern s32 rand8(void);
 
 static inline u32 frandom(u32 param)

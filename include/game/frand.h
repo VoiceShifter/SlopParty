@@ -13,5 +13,8 @@
 u32 frand(void);
 f32 frandf(void);
 u32 frandmod(u32 arg0);
+#ifdef TARGET_PC
+u32 frandStateGet(void);
+#endif
 
 #endif

@@ -44,11 +44,15 @@ partyboard --netplay-connect=127.0.0.1:46040
 
 The host controls player 1 and the client controls player 2. The default input delay is four frames. Internet hosts may need to allow and forward the selected TCP port. This initial implementation is intended for trusted peers and does not provide matchmaking, relay service, or transport encryption.
 
-Both peers send future input before waiting and simulate each frame with identical delayed inputs. This pipeline uses network protocol 2; rebuild both peers together. For high-latency connections, increase **Input Delay** on the host to cover one-way latency (roughly half the ping time), with room for jitter. For example, try eight frames for a 240 ms round-trip connection. Too little delay causes lockstep to wait and reduces FPS; more delay increases controller latency. Both computers must also be able to run the game at 60 FPS.
+Both peers send future input before waiting and simulate each frame with identical delayed inputs. This pipeline uses network protocol 3; rebuild both peers together. For high-latency connections, increase **Input Delay** on the host to cover one-way latency (roughly half the ping time), with room for jitter. For example, try eight frames for a 240 ms round-trip connection. Too little delay causes lockstep to wait and reduces FPS; more delay increases controller latency. Both computers must also be able to run the game at 60 FPS.
+
+Game-data loads complete without advancing simulation frames during netplay, so different local read speeds cannot change loading-wait frame counts. Offline loading remains asynchronous.
 
 ### Connection diagnostics
 
 The console reports each peer's local Git revision, build/settings hashes, and the gameplay settings included in the hash. A **build mismatch** means different Git commits, not different disc-image checksums; rebuild both peers from the same commit. A **gameplay settings mismatch** requires matching the values on the `Hashed settings` lines, including `backend.skipBootSequence`.
+
+During gameplay, input packets also carry same-frame checkpoints for the current overlay/minigame, RNG states, controller assignments, and game flags. A mismatch logs the first differing checkpoint and stops the session rather than continuing with divergent controls. These checks do not cover every game object or implement rollback. Save both consoles if a desynchronization is reported.
 
 The host sends build/settings rejection reasons to the client. If the host closes before sending a welcome or rejection, check the host console: that alone does not prove a hash mismatch. To save console output while using the startup GUI, run `./partyboard > netplay.log 2>&1` on Linux, or `.\partyboard.exe *> netplay.log` in Windows PowerShell.
 

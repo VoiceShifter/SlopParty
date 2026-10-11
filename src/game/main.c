@@ -177,6 +177,8 @@ void main(void)
 #ifdef TARGET_PC
         if (!partyboard_netplay_sync_frame(GlobalCounter)) {
             PartyBoard_IsRunning = FALSE;
+            aurora_end_frame();
+            break;
         }
 #endif
         pfClsScr();

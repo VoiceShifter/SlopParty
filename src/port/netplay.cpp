@@ -2,7 +2,11 @@
 
 extern "C" {
 #include "game/gamework_data.h"
+#include "game/frand.h"
+#include "game/object.h"
 #include "game/pad.h"
+extern s32 rnd_seed;
+extern u32 boardRandSeed;
 }
 #include "partyboard_version.h"
 #include "port/settings.h"
@@ -35,11 +39,15 @@ constexpr u16 DEFAULT_PORT = 46040;
 constexpr u32 DEFAULT_INPUT_DELAY = 4;
 constexpr u32 MAX_INPUT_DELAY = 30;
 constexpr u32 PROTOCOL_MAGIC = 0x50424E50; // PBNP
-constexpr u16 PROTOCOL_VERSION = 2;
+constexpr u16 PROTOCOL_VERSION = 3;
 constexpr size_t HEADER_SIZE = 12;
 constexpr size_t INPUT_SIZE = 15;
 constexpr size_t MAX_PAYLOAD_SIZE = 64;
 constexpr size_t INPUT_BUFFER_SIZE = 64;
+constexpr size_t GAME_STATE_WORDS = 8;
+using GameState = std::array<u32, GAME_STATE_WORDS>;
+constexpr size_t INPUT_PAYLOAD_SIZE = 4 + INPUT_SIZE + GAME_STATE_WORDS * 4;
+static_assert(INPUT_PAYLOAD_SIZE <= MAX_PAYLOAD_SIZE);
 
 #ifdef _WIN32
 using Socket = SOCKET;
@@ -60,6 +68,7 @@ enum class MessageType : u16 {
     Welcome = 2,
     Input = 3,
     Reject = 5,
+    Desync = 6,
 };
 
 enum class RejectionReason : u32 {
@@ -92,6 +101,7 @@ struct InputState {
 struct BufferedInput {
     u32 frame = 0;
     InputState state;
+    GameState checkpoint{};
     bool valid = false;
 };
 
@@ -106,6 +116,7 @@ std::atomic<Socket> g_socket { INVALID_NET_SOCKET };
 std::atomic_bool g_cancelRequested = false;
 bool g_socketSystemInitialized = false;
 bool g_active = false;
+bool g_desynchronized = false;
 u32 g_inputDelay = DEFAULT_INPUT_DELAY;
 u32 g_randomState = 0;
 std::string g_lastError;
@@ -907,15 +918,42 @@ void apply_frame(u32 frame, const InputState &host, const InputState &client)
     }
 }
 
-void store_local_input(u32 frame, const InputState &state)
+GameState capture_game_state()
+{
+    u32 players = 2166136261u;
+    for (const auto &player : GWPlayerCfg) {
+        hash_value(players, static_cast<u32>(player.character));
+        hash_value(players, static_cast<u32>(player.pad_idx));
+        hash_value(players, static_cast<u32>(player.diff));
+        hash_value(players, static_cast<u32>(player.group));
+        hash_value(players, static_cast<u32>(player.iscom));
+    }
+    u32 system = 2166136261u;
+    for (u32 value : {static_cast<u32>(GWSystem.party), static_cast<u32>(GWSystem.team),
+            static_cast<u32>(GWSystem.board), static_cast<u32>(GWSystem.turn),
+            static_cast<u32>(GWSystem.player_curr), static_cast<u32>(GWSystem.mg_type),
+            static_cast<u32>(GWSystem.mg_list), static_cast<u32>(GWSystem.explain_mg)}) {
+        hash_value(system, value);
+    }
+    for (const auto &flags : GWSystem.flag) {
+        for (u8 flag : flags) {
+            hash_value(system, flag);
+        }
+    }
+    return {static_cast<u32>(omcurovl), GWSystem.mg_next, static_cast<u32>(rnd_seed),
+        frandStateGet(), boardRandSeed, g_randomState, players, system};
+}
+
+void store_local_input(u32 frame, const InputState &state, const GameState &checkpoint)
 {
     BufferedInput &input = g_localInputs[frame % g_localInputs.size()];
     input.frame = frame;
     input.state = state;
+    input.checkpoint = checkpoint;
     input.valid = true;
 }
 
-bool load_local_input(u32 frame, InputState &state)
+bool load_local_input(u32 frame, InputState &state, GameState &checkpoint)
 {
     BufferedInput &input = g_localInputs[frame % g_localInputs.size()];
     if (!input.valid || input.frame != frame) {
@@ -923,22 +961,36 @@ bool load_local_input(u32 frame, InputState &state)
         return false;
     }
     state = input.state;
+    checkpoint = input.checkpoint;
     input.valid = false;
     return true;
 }
 
-bool send_input(u32 frame, const InputState &state)
+bool send_input(u32 frame, const InputState &state, const GameState &checkpoint)
 {
-    std::array<u8, 4 + INPUT_SIZE> payload{};
+    std::array<u8, INPUT_PAYLOAD_SIZE> payload{};
     write_u32(&payload[0], frame);
     encode_input(&payload[4], state);
+    for (size_t i = 0; i < checkpoint.size(); ++i) {
+        write_u32(&payload[4 + INPUT_SIZE + i * 4], checkpoint[i]);
+    }
     return send_packet(MessageType::Input, payload.data(), payload.size());
 }
 
-bool receive_input(u32 expectedFrame, InputState &state)
+bool receive_input(u32 expectedFrame, InputState &state, GameState &checkpoint)
 {
     Packet packet;
-    if (!receive_packet(packet) || packet.type != MessageType::Input || packet.size != 4 + INPUT_SIZE) {
+    if (!receive_packet(packet)) {
+        return false;
+    }
+    if (packet.type == MessageType::Desync && packet.size == 4) {
+        g_desynchronized = true;
+        send_packet(MessageType::Desync, packet.payload.data(), packet.size);
+        set_connection_error("The peer detected a game-state desynchronization. Both players must restart.");
+        std::fprintf(stderr, "[netplay] Peer reported desynchronization at game frame %u\n", read_u32(packet.payload.data()));
+        return false;
+    }
+    if (packet.type != MessageType::Input || packet.size != INPUT_PAYLOAD_SIZE) {
         std::fprintf(stderr, "[netplay] Received an invalid input packet\n");
         return false;
     }
@@ -949,21 +1001,53 @@ bool receive_input(u32 expectedFrame, InputState &state)
         return false;
     }
     state = decode_input(&packet.payload[4]);
+    for (size_t i = 0; i < checkpoint.size(); ++i) {
+        checkpoint[i] = read_u32(&packet.payload[4 + INPUT_SIZE + i * 4]);
+    }
     return true;
 }
 
 bool synchronize_frame(u32 frame, const InputState &localInput)
 {
-    store_local_input(frame + g_inputDelay, localInput);
+    const GameState checkpoint = capture_game_state();
+    store_local_input(frame + g_inputDelay, localInput, checkpoint);
     // Send future input before waiting, so both directions share the delay window.
-    if (!send_input(frame + g_inputDelay, localInput)) {
+    if (!send_input(frame + g_inputDelay, localInput, checkpoint)) {
         return false;
     }
 
     InputState local;
     InputState remote;
+    GameState localCheckpoint{};
+    GameState remoteCheckpoint{};
     if (frame >= g_inputDelay) {
-        if (!load_local_input(frame, local) || !receive_input(frame, remote)) {
+        if (!load_local_input(frame, local, localCheckpoint) || !receive_input(frame, remote, remoteCheckpoint)) {
+            return false;
+        }
+        if (localCheckpoint != remoteCheckpoint) {
+            const u32 capturedFrame = frame - g_inputDelay;
+            std::fprintf(stderr, "[netplay] Desynchronization at game frame %u (%s). Input frame numbers match, but game state differs.\n",
+                capturedFrame, g_role == Role::Host ? "host" : "client");
+            constexpr const char *names[] = {"overlay", "minigame", "rand8", "frand", "board RNG", "session RNG", "player configuration", "system flags"};
+            for (size_t i = 0; i < localCheckpoint.size(); ++i) {
+                if (localCheckpoint[i] != remoteCheckpoint[i]) {
+                    std::fprintf(stderr, "[netplay] %s: local=0x%08x peer=0x%08x\n", names[i], localCheckpoint[i], remoteCheckpoint[i]);
+                }
+            }
+            g_desynchronized = true;
+            std::array<u8, 4> payload{};
+            write_u32(payload.data(), capturedFrame);
+            if (send_packet(MessageType::Desync, payload.data(), payload.size())) {
+                // Keep the socket open until the peer acknowledges; closing here
+                // can make its next input send fail before it reads the checkpoint.
+                Packet acknowledgement;
+                while (receive_packet(acknowledgement)) {
+                    if (acknowledgement.type == MessageType::Desync && acknowledgement.size == 4) {
+                        break;
+                    }
+                }
+            }
+            set_connection_error("Game state desynchronized. Both players must restart; compare the checkpoint details in both consoles.");
             return false;
         }
     }
@@ -987,6 +1071,7 @@ bool initialize_connection(const NetplayConfig &config)
         return false;
     }
 
+    g_desynchronized = false;
     g_role = config.role;
     std::fprintf(stderr, "[netplay] Local %s handshake: revision=%s, build_hash=0x%08x, settings_hash=0x%08x, protocol=%u\n",
         config.role == Role::Host ? "host" : "client", PARTY_BOARD_WC_REVISION, build_hash(), gameplay_settings_hash(), PROTOCOL_VERSION);
@@ -1102,9 +1187,10 @@ extern "C" BOOL partyboard_netplay_sync_frame(u32 frame)
     const bool synchronized = synchronize_frame(frame, localInput);
     if (!synchronized) {
         const Role disconnectedRole = g_role;
+        const bool desynchronized = g_desynchronized;
         std::fprintf(stderr, "[netplay] Session ended at frame %u\n", frame);
         partyboard_netplay_shutdown();
-        if (disconnectedRole == Role::Host) {
+        if (disconnectedRole == Role::Host && !desynchronized) {
             InputState disconnected;
             disconnected.error = PAD_ERR_NO_CONTROLLER;
             apply_input(1, disconnected);
