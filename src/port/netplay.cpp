@@ -17,8 +17,10 @@ extern u32 boardRandSeed;
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -121,6 +123,27 @@ u32 g_inputDelay = DEFAULT_INPUT_DELAY;
 u32 g_randomState = 0;
 std::string g_lastError;
 std::array<BufferedInput, INPUT_BUFFER_SIZE> g_localInputs{};
+
+// Keep only the latest status when output is slow. Zero means no pending
+// report; other values encode frame + 1 so frame zero can also be logged.
+std::atomic<u64> g_progressFrame{0};
+std::jthread g_progressThread;
+
+void write_progress_logs(std::stop_token stop)
+{
+    std::stop_callback wakeOnStop(stop, [] {
+        g_progressFrame.store(1, std::memory_order_relaxed);
+        g_progressFrame.notify_one();
+    });
+    while (!stop.stop_requested()) {
+        const u64 pending = g_progressFrame.exchange(0, std::memory_order_relaxed);
+        if (pending == 0) {
+            g_progressFrame.wait(0, std::memory_order_relaxed);
+        } else if (!stop.stop_requested()) {
+            std::fprintf(stderr, "[netplay] Synchronized frame %u\n", static_cast<u32>(pending - 1));
+        }
+    }
+}
 
 void write_u16(u8 *data, u16 value)
 {
@@ -914,7 +937,8 @@ void apply_frame(u32 frame, const InputState &host, const InputState &client)
     apply_input(3, disconnected);
 
     if (frame % 600 == 0) {
-        std::fprintf(stderr, "[netplay] Synchronized frame %u\n", frame);
+        g_progressFrame.store(static_cast<u64>(frame) + 1, std::memory_order_relaxed);
+        g_progressFrame.notify_one();
     }
 }
 
@@ -1092,6 +1116,9 @@ bool initialize_connection(const NetplayConfig &config)
         return false;
     }
 
+    if (!g_progressThread.joinable()) {
+        g_progressThread = std::jthread(write_progress_logs);
+    }
     g_active = true;
     return true;
 }
@@ -1166,6 +1193,7 @@ extern "C" const char *partyboard_netplay_last_error(void)
 extern "C" void partyboard_netplay_shutdown(void)
 {
     g_active = false;
+    g_progressFrame.store(0, std::memory_order_relaxed);
     close_global_socket();
     shutdown_socket_system();
     g_role = Role::None;
