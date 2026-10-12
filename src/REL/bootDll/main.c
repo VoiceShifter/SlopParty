@@ -234,6 +234,11 @@ void ObjectSetup(void)
              HuSprPosSet(group, 1, 288, 240);
              HuSprAttrSet(group, 1, HUSPR_ATTR_DISPOFF);
              while (OSTicksToMilliseconds(OSGetTick() - tick_prev) < 3000) {
+#ifdef TARGET_PC
+                if (HuPadBtnDown[0] & (PAD_BUTTON_START | PAD_BUTTON_A)) {
+                    break;
+                }
+#endif
                 HuPrcVSleep();
              }
          }
@@ -281,6 +286,11 @@ void ObjectSetup(void)
              msmSysLoadGroup(0, group_samp, 0);
              HuMemDirectFree(group_samp);
              while (OSTicksToMilliseconds(OSGetTick() - tick_prev) < 3000) {
+#ifdef TARGET_PC
+                if (HuPadBtnDown[0] & (PAD_BUTTON_START | PAD_BUTTON_A)) {
+                    break;
+                }
+#endif
                 HuPrcVSleep();
              }
          }
