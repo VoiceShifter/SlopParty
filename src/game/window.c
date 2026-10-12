@@ -438,7 +438,11 @@ static void MesDispFunc(HUSPRITE *sprite)
         MTXConcat(*sprite->groupMtx, modelview, modelview);
         GXLoadPosMtxImm(modelview, 0);
         GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+#ifdef TARGET_PC
+        HuSprTexLoad(fontAnim, 0, 0, GX_CLAMP, GX_CLAMP, GX_NEAR);
+#else
         HuSprTexLoad(fontAnim, 0, 0, GX_CLAMP, GX_CLAMP, VERSION_JP ? GX_NEAR : GX_LINEAR);
+#endif
         GXBegin(GX_QUADS, GX_VTXFMT0, window->num_chars * 4);
         char_uv_h = (LanguageNo == 0) ? (24.0f / 408.0f) : (24.0f / 312.0f);
         for (i = 0; i < window->num_chars; i++) {
