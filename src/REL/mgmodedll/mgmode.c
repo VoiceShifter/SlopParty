@@ -50,6 +50,16 @@ s32 lbl_1_bss_0;
 void fn_1_464(void);
 void fn_1_54F4(void);
 
+static void MenuPos2Dto3D(Vec *pos2D, Vec *pos3D)
+{
+    Vec pos = *pos2D;
+#ifdef TARGET_PC
+    // Keep the 3D menu boxes aligned with the stretched 2D cursor.
+    pos.x += (pos.x - HU_DISP_CENTERX) * (Hu3DAspectScaleGet() - 1.0f);
+#endif
+    Hu3D2Dto3D(&pos, 1, pos3D);
+}
+
 void ObjectSetup(void)
 {
     s32 glight;
@@ -163,7 +173,7 @@ void fn_1_6F8(void)
                 Vec pos3D;
                 pos2D.z = 800;
                 pos2D.y -= (1.0 - sind(weight * 90.0f)) * 300.0;
-                Hu3D2Dto3D(&pos2D, 1, &pos3D);
+                MenuPos2Dto3D(&pos2D, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -285,7 +295,7 @@ void fn_1_DF0(void)
     pos2D.x = 168;
     pos2D.y = 190;
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -298,7 +308,7 @@ void fn_1_DF0(void)
                 pos = lbl_1_data_40[i];
                 pos.z = 800;
                 pos.x += (1.0 - cosd(weight * 90.0f)) * 500.0;
-                Hu3D2Dto3D(&pos, 1, &pos3D);
+                MenuPos2Dto3D(&pos, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -402,7 +412,7 @@ void fn_1_DF0(void)
     mgModeEvtNo = 0;
     pos2D = lbl_1_data_40[0];
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -423,7 +433,7 @@ void fn_1_DF0(void)
                 pos2D = lbl_1_data_40[i];
                 pos2D.z = 800;
                 pos2D.x += (1.0 - sind(weight * 90.0f)) * 500.0;
-                Hu3D2Dto3D(&pos2D, 1, &pos3D);
+                MenuPos2Dto3D(&pos2D, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -446,7 +456,7 @@ s32 fn_1_1B0C(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         Hu3DModelPosSetV(lbl_1_bss_2C80[9], &pos3D);
         Hu3DModelRotSet(lbl_1_bss_2C80[9], -90, 0, 0);
@@ -465,7 +475,7 @@ s32 fn_1_1B0C(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         modelP = &Hu3DData[lbl_1_bss_2C80[9]];
         posModel = modelP->pos;
@@ -502,7 +512,7 @@ exit:
     pos2D.x = 168;
     pos2D.y = 190;
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -538,7 +548,7 @@ s32 fn_1_21C4(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         Hu3DModelPosSetV(lbl_1_bss_2C80[9], &pos3D);
         Hu3DModelRotSet(lbl_1_bss_2C80[9], 0, -90, 90);
@@ -557,7 +567,7 @@ s32 fn_1_21C4(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         modelP = &Hu3DData[lbl_1_bss_2C80[9]];
         posModel = modelP->pos;
@@ -595,7 +605,7 @@ exit:
     pos2D.x = 168;
     pos2D.y = 190;
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -635,7 +645,7 @@ s32 fn_1_2940(void)
         pos2D.x = 50;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         Hu3DModelPosSetV(lbl_1_bss_2C80[9], &pos3D);
         Hu3DModelRotSet(lbl_1_bss_2C80[9], -90, 180, 0);
@@ -654,7 +664,7 @@ s32 fn_1_2940(void)
         pos2D.x = 50;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         modelP = &Hu3DData[lbl_1_bss_2C80[9]];
         posModel = modelP->pos;
@@ -696,7 +706,7 @@ exit:
     pos2D.x = 168;
     pos2D.y = 190;
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -732,7 +742,7 @@ s32 fn_1_3150(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         Hu3DModelPosSetV(lbl_1_bss_2C80[9], &pos3D);
         Hu3DModelRotSet(lbl_1_bss_2C80[9], -90, 90, 0);
@@ -751,7 +761,7 @@ s32 fn_1_3150(void)
         pos2D.x = 60;
         pos2D.y = 70;
         pos2D.z = 1000;
-        Hu3D2Dto3D(&pos2D, 1, &pos3D);
+        MenuPos2Dto3D(&pos2D, &pos3D);
         pos3D.z -= 50.0f;
         modelP = &Hu3DData[lbl_1_bss_2C80[9]];
         posModel = modelP->pos;
@@ -790,7 +800,7 @@ exit:
     pos2D.x = 168;
     pos2D.y = 190;
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50;
     modelP = &Hu3DData[lbl_1_bss_2C80[9]];
     posModel = modelP->pos;
@@ -832,7 +842,7 @@ void fn_1_38D8(void)
     pos2D.x = 60;
     pos2D.y = 70;
     pos2D.z = 1000;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[10]];
     posModel = modelP->pos;
@@ -848,7 +858,7 @@ void fn_1_38D8(void)
                 posBox = lbl_1_data_40[i];
                 posBox.z = 800;
                 posBox.x += ((i < 2) ? -1 : 1) * (500.0 * (1.0 - cosd(90.0f * weight)));
-                Hu3D2Dto3D(&posBox, 1, &pos3D);
+                MenuPos2Dto3D(&posBox, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -865,7 +875,7 @@ void fn_1_38D8(void)
     fn_1_6D28();
     pos2D = lbl_1_data_40[1];
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[10]];
     posModel = modelP->pos;
@@ -887,7 +897,7 @@ void fn_1_38D8(void)
                 pos2D = lbl_1_data_40[i];
                 pos2D.z = 800;
                 pos2D.x += ((i < 2) ? -1 : 1) * ((1.0 - sind(weight * 90.0f)) * 500.0);
-                Hu3D2Dto3D(&pos2D, 1, &pos3D);
+                MenuPos2Dto3D(&pos2D, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -915,7 +925,7 @@ void fn_1_4010(void)
     pos2D.x = 60;
     pos2D.y = 70;
     pos2D.z = 1000;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[11]];
     posModel = modelP->pos;
@@ -931,7 +941,7 @@ void fn_1_4010(void)
                 posBox = lbl_1_data_40[i];
                 posBox.z = 800;
                 posBox.x += ((i < 3) ? -1 : 1) * (500.0 * (1.0 - cosd(90.0f * weight)));
-                Hu3D2Dto3D(&posBox, 1, &pos3D);
+                MenuPos2Dto3D(&posBox, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -962,7 +972,7 @@ void fn_1_4010(void)
     }
     pos2D = lbl_1_data_40[2];
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[11]];
     posModel = modelP->pos;
@@ -984,7 +994,7 @@ void fn_1_4010(void)
                 pos2D = lbl_1_data_40[i];
                 pos2D.z = 800;
                 pos2D.x += ((i < 3) ? -1 : 1) * ((1.0 - sind(weight * 90.0f)) * 500.0);
-                Hu3D2Dto3D(&pos2D, 1, &pos3D);
+                MenuPos2Dto3D(&pos2D, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -1060,7 +1070,7 @@ void fn_1_4ADC(void)
     pos2D.x = 50;
     pos2D.y = 64;
     pos2D.z = 1000;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[11]];
     posModel = modelP->pos;
@@ -1076,7 +1086,7 @@ void fn_1_4ADC(void)
                 posBox = lbl_1_data_40[i];
                 posBox.z = 800;
                 posBox.x += ((i < 3) ? -1 : 1) * (500.0 * (1.0 - cosd(90.0f * weight)));
-                Hu3D2Dto3D(&posBox, 1, &pos3D);
+                MenuPos2Dto3D(&posBox, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
@@ -1095,7 +1105,7 @@ void fn_1_4ADC(void)
     fn_1_D8D0();
     pos2D = lbl_1_data_40[3];
     pos2D.z = 800;
-    Hu3D2Dto3D(&pos2D, 1, &pos3D);
+    MenuPos2Dto3D(&pos2D, &pos3D);
     pos3D.z -= 50.0f;
     modelP = &Hu3DData[lbl_1_bss_2C80[12]];
     posModel = modelP->pos;
@@ -1119,7 +1129,7 @@ void fn_1_4ADC(void)
                 pos2D = lbl_1_data_40[i];
                 pos2D.z = 800;
                 pos2D.x += ((i < 3) ? -1 : 1) * ((1.0 - sind(weight * 90.0f)) * 500.0);
-                Hu3D2Dto3D(&pos2D, 1, &pos3D);
+                MenuPos2Dto3D(&pos2D, &pos3D);
                 pos3D.z -= 50.0f;
                 Hu3DModelPosSetV(lbl_1_bss_2C80[i + 9], &pos3D);
                 Hu3DModelAttrReset(lbl_1_bss_2C80[i + 9], HU3D_ATTR_DISPOFF);
