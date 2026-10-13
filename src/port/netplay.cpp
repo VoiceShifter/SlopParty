@@ -1,3 +1,15 @@
+#ifdef _WIN32
+// Winsock 2 must precede headers that may include windows.h.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 #include "port/netplay.h"
 
 extern "C" {
@@ -22,10 +34,7 @@ extern u32 boardRandSeed;
 #include <string_view>
 #include <thread>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
+#ifndef _WIN32
 #include <cerrno>
 #include <fcntl.h>
 #include <netdb.h>
